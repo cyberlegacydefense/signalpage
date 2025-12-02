@@ -11,7 +11,7 @@ export function CTASection({ user, companyName, roleTitle }: CTASectionProps) {
     <section className="bg-gray-900 px-4 py-16 text-white sm:py-20">
       <div className="mx-auto max-w-3xl text-center">
         <h2 className="mb-4 text-2xl font-bold sm:text-3xl">
-          Let&apos;s Talk About {roleTitle}
+          Let&apos;s Talk About The {roleTitle} Role
         </h2>
         <p className="mb-8 text-lg text-gray-300">
           I&apos;m excited about the opportunity at {companyName}. Let&apos;s connect and

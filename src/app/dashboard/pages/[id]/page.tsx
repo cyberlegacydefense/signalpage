@@ -12,6 +12,7 @@ import type {
   HighlightSection,
   Plan306090,
   CaseStudy,
+  MatchBreakdown,
 } from '@/types';
 
 interface PageProps {
@@ -36,6 +37,7 @@ export default function PageEditorPage({ params }: PageProps) {
   const [copied, setCopied] = useState(false);
   const [showAICommentary, setShowAICommentary] = useState(true);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [analytics, setAnalytics] = useState<{ views: number; uniqueViews: number } | null>(null);
 
   useEffect(() => {
     async function loadPage() {
@@ -78,6 +80,21 @@ export default function PageEditorPage({ params }: PageProps) {
       setPage(data as PageData);
       setShowAICommentary(data.show_ai_commentary !== false);
       setIsLoading(false);
+
+      // Load analytics
+      const { data: analyticsData } = await supabase
+        .from('page_analytics')
+        .select('id, ip_hash')
+        .eq('page_id', pageId)
+        .eq('event_type', 'page_view');
+
+      if (analyticsData) {
+        const uniqueIps = new Set(analyticsData.map(a => a.ip_hash).filter(Boolean));
+        setAnalytics({
+          views: analyticsData.length,
+          uniqueViews: uniqueIps.size || analyticsData.length,
+        });
+      }
     }
 
     loadPage();
@@ -456,19 +473,141 @@ export default function PageEditorPage({ params }: PageProps) {
         )}
       </div>
 
-      {/* Analytics Placeholder */}
-      <Card className="mt-8">
-        <CardHeader>
-          <CardTitle>Page Analytics</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-gray-500">
-            {page.is_published
-              ? 'Analytics will appear here once your page receives views.'
-              : 'Publish your page to start tracking analytics.'}
-          </p>
-        </CardContent>
-      </Card>
+      {/* Role Match Score & Analytics Row */}
+      <div className="mt-8 grid gap-6 md:grid-cols-2">
+        {/* Role Match Score */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Role Match Score</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {page.match_score !== undefined && page.match_score !== null ? (
+              <div>
+                {/* Score Circle */}
+                <div className="flex items-center gap-6">
+                  <div className={`relative flex h-24 w-24 items-center justify-center rounded-full ${
+                    page.match_score >= 80 ? 'bg-green-100' :
+                    page.match_score >= 60 ? 'bg-blue-100' :
+                    page.match_score >= 40 ? 'bg-yellow-100' : 'bg-red-100'
+                  }`}>
+                    <span className={`text-3xl font-bold ${
+                      page.match_score >= 80 ? 'text-green-600' :
+                      page.match_score >= 60 ? 'text-blue-600' :
+                      page.match_score >= 40 ? 'text-yellow-600' : 'text-red-600'
+                    }`}>
+                      {page.match_score}
+                    </span>
+                  </div>
+                  <div>
+                    <p className={`text-lg font-semibold ${
+                      page.match_score >= 80 ? 'text-green-600' :
+                      page.match_score >= 60 ? 'text-blue-600' :
+                      page.match_score >= 40 ? 'text-yellow-600' : 'text-red-600'
+                    }`}>
+                      {page.match_score >= 80 ? 'Excellent Match' :
+                       page.match_score >= 60 ? 'Strong Match' :
+                       page.match_score >= 40 ? 'Moderate Match' : 'Needs Review'}
+                    </p>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Based on skills, experience, and requirements alignment
+                    </p>
+                  </div>
+                </div>
+
+                {/* Breakdown */}
+                {page.match_breakdown && (
+                  <div className="mt-6 space-y-3">
+                    <div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Skills Match</span>
+                        <span className="font-medium">{page.match_breakdown.skills_match}%</span>
+                      </div>
+                      <div className="mt-1 h-2 rounded-full bg-gray-200">
+                        <div
+                          className="h-2 rounded-full bg-blue-600"
+                          style={{ width: `${page.match_breakdown.skills_match}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Experience Match</span>
+                        <span className="font-medium">{page.match_breakdown.experience_match}%</span>
+                      </div>
+                      <div className="mt-1 h-2 rounded-full bg-gray-200">
+                        <div
+                          className="h-2 rounded-full bg-purple-600"
+                          style={{ width: `${page.match_breakdown.experience_match}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Requirements Match</span>
+                        <span className="font-medium">{page.match_breakdown.requirements_match}%</span>
+                      </div>
+                      <div className="mt-1 h-2 rounded-full bg-gray-200">
+                        <div
+                          className="h-2 rounded-full bg-green-600"
+                          style={{ width: `${page.match_breakdown.requirements_match}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Skills summary */}
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium text-green-600">{page.match_breakdown.total_matched_skills}</span>
+                        {' '}of{' '}
+                        <span className="font-medium">{page.match_breakdown.total_required_skills}</span>
+                        {' '}required skills matched
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">
+                Match score not available. Regenerate the page to calculate.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Page Analytics */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Page Analytics</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!page.is_published ? (
+              <p className="text-sm text-gray-500">
+                Publish your page to start tracking analytics.
+              </p>
+            ) : analytics ? (
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="rounded-lg bg-gray-50 p-4 text-center">
+                    <p className="text-3xl font-bold text-gray-900">{analytics.views}</p>
+                    <p className="mt-1 text-sm text-gray-500">Total Views</p>
+                  </div>
+                  <div className="rounded-lg bg-gray-50 p-4 text-center">
+                    <p className="text-3xl font-bold text-gray-900">{analytics.uniqueViews}</p>
+                    <p className="mt-1 text-sm text-gray-500">Unique Visitors</p>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400 text-center">
+                  Analytics update in real-time as visitors view your page
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">
+                No views yet. Share your page URL to start getting visitors.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { generateFullPage, parseJobDescription } from '@/lib/llm/generation-service';
 import { generateSlug } from '@/lib/utils/slug';
+import { calculateMatchScore } from '@/lib/utils/match-score';
 import type { GenerationContext, ParsedResume, Job, User } from '@/types';
 
 export async function POST(request: Request) {
@@ -94,6 +95,12 @@ export async function POST(request: Request) {
     // Generate all page sections
     const generated = await generateFullPage(context);
 
+    // Calculate match score
+    const { score: matchScore, breakdown: matchBreakdown } = calculateMatchScore(
+      resume.parsed_data as ParsedResume,
+      parsedRequirements
+    );
+
     // Create the signal page
     const slug = generateSlug(job.company_name, job.role_title);
 
@@ -110,6 +117,8 @@ export async function POST(request: Request) {
         plan_30_60_90: generated.plan_30_60_90,
         case_studies: generated.case_studies,
         ai_commentary: generated.ai_commentary,
+        match_score: matchScore,
+        match_breakdown: matchBreakdown,
       })
       .select()
       .single();
@@ -131,6 +140,8 @@ export async function POST(request: Request) {
             plan_30_60_90: generated.plan_30_60_90,
             case_studies: generated.case_studies,
             ai_commentary: generated.ai_commentary,
+            match_score: matchScore,
+            match_breakdown: matchBreakdown,
           })
           .select()
           .single();

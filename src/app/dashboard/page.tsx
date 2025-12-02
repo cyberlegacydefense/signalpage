@@ -18,7 +18,8 @@ export default async function DashboardPage() {
         id,
         slug,
         is_published,
-        generated_at
+        generated_at,
+        match_score
       )
     `)
     .eq('user_id', user!.id)
@@ -108,7 +109,19 @@ export default async function DashboardPage() {
                       </h3>
                       <p className="text-sm text-gray-600">{job.company_name}</p>
                     </div>
-                    {getStatusBadge(job.status)}
+                    <div className="flex flex-col items-end gap-2">
+                      {getStatusBadge(job.status)}
+                      {page?.match_score !== undefined && page?.match_score !== null && (
+                        <div className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                          page.match_score >= 80 ? 'bg-green-100 text-green-700' :
+                          page.match_score >= 60 ? 'bg-blue-100 text-blue-700' :
+                          page.match_score >= 40 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                        }`}>
+                          <span>{page.match_score}%</span>
+                          <span>match</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="mb-4 text-xs text-gray-500">

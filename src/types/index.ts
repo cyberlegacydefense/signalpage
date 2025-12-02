@@ -120,10 +120,24 @@ export interface SignalPage {
   ai_commentary?: string;
   show_ai_commentary?: boolean;
 
+  // Match score
+  match_score?: number;
+  match_breakdown?: MatchBreakdown;
+
   // Metadata
   generated_at: string;
   last_edited_at: string;
   version: number;
+}
+
+export interface MatchBreakdown {
+  skills_match: number;
+  experience_match: number;
+  requirements_match: number;
+  matched_skills: string[];
+  missing_skills: string[];
+  total_required_skills: number;
+  total_matched_skills: number;
 }
 
 export interface HeroSection {
