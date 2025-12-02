@@ -35,6 +35,7 @@ export default function PageEditorPage({ params }: PageProps) {
   const [isPublishing, setIsPublishing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showAICommentary, setShowAICommentary] = useState(true);
+  const [isRegenerating, setIsRegenerating] = useState(false);
 
   useEffect(() => {
     async function loadPage() {
@@ -154,6 +155,33 @@ export default function PageEditorPage({ params }: PageProps) {
     } catch (err) {
       console.error('Error toggling AI commentary:', err);
       setShowAICommentary(!newValue); // Revert on error
+    }
+  };
+
+  const handleRegenerateCommentary = async () => {
+    if (!page) return;
+
+    setIsRegenerating(true);
+
+    try {
+      const response = await fetch('/api/regenerate-commentary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to regenerate');
+      }
+
+      const { ai_commentary } = await response.json();
+      setPage((prev) => prev ? { ...prev, ai_commentary } : null);
+    } catch (err) {
+      console.error('Error regenerating commentary:', err);
+      alert('Failed to regenerate AI commentary. Please try again.');
+    } finally {
+      setIsRegenerating(false);
     }
   };
 
@@ -389,11 +417,40 @@ export default function PageEditorPage({ params }: PageProps) {
               <div className={`rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 p-4 ${!showAICommentary ? 'opacity-50' : ''}`}>
                 <p className="whitespace-pre-wrap text-gray-700">{page.ai_commentary}</p>
               </div>
-              {!showAICommentary && (
-                <p className="mt-2 text-sm text-gray-500">
-                  This section will not be visible on your published page.
-                </p>
-              )}
+              <div className="mt-3 flex items-center justify-between">
+                {!showAICommentary ? (
+                  <p className="text-sm text-gray-500">
+                    This section will not be visible on your published page.
+                  </p>
+                ) : (
+                  <p className="text-sm text-gray-500">
+                    Uses your first name for a personalized touch.
+                  </p>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRegenerateCommentary}
+                  disabled={isRegenerating}
+                >
+                  {isRegenerating ? (
+                    <>
+                      <svg className="mr-1.5 h-4 w-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Regenerating...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Regenerate
+                    </>
+                  )}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
