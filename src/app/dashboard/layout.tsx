@@ -2,6 +2,9 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 
+// Force dynamic rendering - don't try to prerender at build time
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardLayout({
   children,
 }: {

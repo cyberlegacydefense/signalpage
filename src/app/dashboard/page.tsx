@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { Button, Card, CardContent, Badge } from '@/components/ui';
 import { formatDistanceToNow } from 'date-fns';
 
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

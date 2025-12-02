@@ -18,6 +18,8 @@ import type {
   CaseStudy,
 } from '@/types';
 
+export const dynamic = 'force-dynamic';
+
 interface PageProps {
   params: Promise<{ username: string; slug: string }>;
 }
