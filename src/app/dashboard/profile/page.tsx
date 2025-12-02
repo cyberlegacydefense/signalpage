@@ -124,23 +124,35 @@ export default function ProfilePage() {
 
     setIsUploading(true);
     setError('');
+    setSuccess('');
 
     try {
-      // For text files, read directly
+      // For text files, read directly on client
       if (file.type === 'text/plain') {
         const text = await file.text();
         setResumeText(text);
         setSuccess('File loaded successfully! Click "Save & Parse" to process.');
       } else {
-        // For PDF/DOC files, we need to extract text
-        // For now, we'll use a simple approach - ask user to paste text
-        // In production, you'd use a document parsing service
-        setError(
-          'PDF/DOC parsing coming soon. For now, please copy the text from your document and paste it in the text area below.'
-        );
+        // For PDF files, use the API to parse
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('/api/parse-file', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to parse file');
+        }
+
+        setResumeText(data.text);
+        setSuccess('File parsed successfully! Click "Save & Parse" to process with AI.');
       }
     } catch (err) {
-      setError('Failed to read file. Please try pasting the text instead.');
+      setError(err instanceof Error ? err.message : 'Failed to read file. Please try pasting the text instead.');
     } finally {
       setIsUploading(false);
       // Reset the file input
