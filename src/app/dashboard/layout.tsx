@@ -30,15 +30,15 @@ export default async function DashboardLayout({
       {/* Navigation */}
       <nav className="border-b border-gray-200 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-32 justify-between">
+          <div className="flex h-20 justify-between">
             <div className="flex">
               <Link href="/dashboard" className="flex items-center">
                 <Image
                   src="/signalpage-logo.png"
                   alt="SignalPage"
-                  width={836}
-                  height={248}
-                  className="h-20 w-auto"
+                  width={822}
+                  height={234}
+                  className="h-12 w-auto"
                   priority
                 />
               </Link>

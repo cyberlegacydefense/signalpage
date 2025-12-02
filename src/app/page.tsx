@@ -7,14 +7,14 @@ export default function Home() {
     <div className="min-h-screen bg-white">
       {/* Navigation */}
       <nav className="border-b border-gray-100">
-        <div className="mx-auto flex h-32 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link href="/" className="flex items-center">
             <Image
               src="/signalpage-logo.png"
               alt="SignalPage"
-              width={836}
-              height={248}
-              className="h-20 w-auto"
+              width={822}
+              height={234}
+              className="h-12 w-auto"
               priority
             />
           </Link>
@@ -275,9 +275,9 @@ export default function Home() {
             <Image
               src="/signalpage-logo.png"
               alt="SignalPage"
-              width={836}
-              height={248}
-              className="h-16 sm:h-20 w-auto"
+              width={822}
+              height={234}
+              className="h-10 w-auto"
             />
             <div className="flex items-center gap-6 text-sm">
               <Link href="/faq" className="text-gray-600 hover:text-gray-900">
