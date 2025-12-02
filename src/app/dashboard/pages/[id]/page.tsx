@@ -37,6 +37,7 @@ export default function PageEditorPage({ params }: PageProps) {
   const [copied, setCopied] = useState(false);
   const [showAICommentary, setShowAICommentary] = useState(true);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [isRecalculatingScore, setIsRecalculatingScore] = useState(false);
   const [analytics, setAnalytics] = useState<{ views: number; uniqueViews: number } | null>(null);
 
   useEffect(() => {
@@ -199,6 +200,33 @@ export default function PageEditorPage({ params }: PageProps) {
       alert('Failed to regenerate AI commentary. Please try again.');
     } finally {
       setIsRegenerating(false);
+    }
+  };
+
+  const handleRecalculateScore = async () => {
+    if (!page) return;
+
+    setIsRecalculatingScore(true);
+
+    try {
+      const response = await fetch('/api/recalculate-score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to recalculate');
+      }
+
+      const { match_score, match_breakdown } = await response.json();
+      setPage((prev) => prev ? { ...prev, match_score, match_breakdown } : null);
+    } catch (err) {
+      console.error('Error recalculating score:', err);
+      alert('Failed to recalculate match score. Please try again.');
+    } finally {
+      setIsRecalculatingScore(false);
     }
   };
 
@@ -554,22 +582,40 @@ export default function PageEditorPage({ params }: PageProps) {
                       </div>
                     </div>
 
-                    {/* Skills summary */}
-                    <div className="mt-4 pt-4 border-t border-gray-200">
+                    {/* Skills summary and recalculate button */}
+                    <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between">
                       <p className="text-sm text-gray-600">
                         <span className="font-medium text-green-600">{page.match_breakdown.total_matched_skills}</span>
                         {' '}of{' '}
                         <span className="font-medium">{page.match_breakdown.total_required_skills}</span>
                         {' '}required skills matched
                       </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRecalculateScore}
+                        disabled={isRecalculatingScore}
+                      >
+                        {isRecalculatingScore ? 'Calculating...' : 'Recalculate'}
+                      </Button>
                     </div>
                   </div>
                 )}
               </div>
             ) : (
-              <p className="text-sm text-gray-500">
-                Match score not available. Regenerate the page to calculate.
-              </p>
+              <div className="text-center">
+                <p className="text-sm text-gray-500 mb-4">
+                  Match score not available for this page.
+                </p>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleRecalculateScore}
+                  disabled={isRecalculatingScore}
+                >
+                  {isRecalculatingScore ? 'Calculating...' : 'Calculate Match Score'}
+                </Button>
+              </div>
             )}
           </CardContent>
         </Card>
