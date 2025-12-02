@@ -78,9 +78,9 @@ export default function ProfilePage() {
   }
 
   const handleResumeSelect = (id: string | 'new') => {
-    setSelectedResumeId(id);
     setError('');
     setSuccess('');
+    setSelectedResumeId(id);
 
     if (id === 'new') {
       setCurrentResume(null);
@@ -93,6 +93,7 @@ export default function ProfilePage() {
         setCurrentResume(resume);
         setResumeName(resume.name || '');
         setResumeTag(resume.tag || '');
+        // Force update the textarea with the selected resume's text
         setResumeText(resume.raw_text || '');
       }
     }
@@ -561,6 +562,7 @@ export default function ProfilePage() {
 
           {/* Resume Text */}
           <Textarea
+            key={selectedResumeId}
             label="Resume Text"
             value={resumeText}
             onChange={(e) => setResumeText(e.target.value)}
