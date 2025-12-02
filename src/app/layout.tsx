@@ -15,15 +15,6 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "SignalPage - Role-Specific Landing Pages for Job Seekers",
   description: "Create role-specific landing pages that prove you did your homework. Show companies exactly why you're a great fit with tailored content, a 30/60/90 day plan, and AI-powered insights.",
-  icons: {
-    icon: [
-      { url: '/favicon.png', type: 'image/png' },
-    ],
-    apple: [
-      { url: '/favicon.png', type: 'image/png' },
-    ],
-    shortcut: '/favicon.png',
-  },
   openGraph: {
     title: "SignalPage - Stand Out From Generic Applicants",
     description: "Create role-specific landing pages that prove you did your homework.",

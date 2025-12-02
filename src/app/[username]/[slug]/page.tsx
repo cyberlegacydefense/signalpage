@@ -53,18 +53,20 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     .eq('is_published', true)
     .single();
 
-  if (!page) {
+  if (!page || !page.jobs) {
     return { title: 'Page Not Found' };
   }
 
-  const hero = page.hero as HeroSectionType;
+  const hero = (page.hero || { tagline: '', value_promise: '' }) as HeroSectionType;
+  const roleTitle = page.jobs.role_title || 'Role';
+  const companyName = page.jobs.company_name || 'Company';
 
   return {
-    title: `${profile.full_name} - ${page.jobs.role_title} @ ${page.jobs.company_name}`,
-    description: hero.value_promise,
+    title: `${profile.full_name} - ${roleTitle} @ ${companyName}`,
+    description: hero.value_promise || '',
     openGraph: {
-      title: `${profile.full_name} - ${page.jobs.role_title} @ ${page.jobs.company_name}`,
-      description: hero.value_promise,
+      title: `${profile.full_name} - ${roleTitle} @ ${companyName}`,
+      description: hero.value_promise || '',
       type: 'profile',
     },
   };
@@ -112,24 +114,30 @@ export default async function SignalPage({ params }: PageProps) {
 
   const { data: page } = await query.single();
 
-  if (!page) {
+  if (!page || !page.jobs) {
     notFound();
   }
 
-  // Record page view
-  await supabase.from('page_analytics').insert({
+  // Extract job info with defaults
+  const jobInfo = {
+    role_title: page.jobs.role_title || 'Role',
+    company_name: page.jobs.company_name || 'Company',
+  };
+
+  // Record page view (fire and forget, ignore errors)
+  void supabase.from('page_analytics').insert({
     page_id: page.id,
     event_type: 'page_view',
-    referrer: null, // Would need to get from headers in middleware
+    referrer: null,
     user_agent: null,
   });
 
-  // Cast the JSONB fields to proper types
-  const hero = page.hero as HeroSectionType;
-  const fitSection = page.fit_section as FitSectionType;
-  const highlights = page.highlights as HighlightSection[];
-  const plan306090 = page.plan_30_60_90 as Plan306090;
-  const caseStudies = page.case_studies as CaseStudy[];
+  // Cast the JSONB fields to proper types with defaults
+  const hero = (page.hero || { tagline: '', value_promise: '' }) as HeroSectionType;
+  const fitSection = (page.fit_section || { fit_bullets: [] }) as FitSectionType;
+  const highlights = (page.highlights || []) as HighlightSection[];
+  const plan306090 = (page.plan_30_60_90 || { day_30: {}, day_60: {}, day_90: {} }) as Plan306090;
+  const caseStudies = (page.case_studies || []) as CaseStudy[];
 
   return (
     <div className="min-h-screen bg-white">
@@ -160,22 +168,19 @@ export default async function SignalPage({ params }: PageProps) {
           avatar_url: profile.avatar_url,
           linkedin_url: profile.linkedin_url,
         }}
-        job={{
-          role_title: page.jobs.role_title,
-          company_name: page.jobs.company_name,
-        }}
+        job={jobInfo}
       />
 
       <FitSection
         fitSection={fitSection}
-        companyName={page.jobs.company_name}
+        companyName={jobInfo.company_name}
       />
 
       <HighlightsSection highlights={highlights} />
 
       <Plan306090Section
         plan={plan306090}
-        companyName={page.jobs.company_name}
+        companyName={jobInfo.company_name}
       />
 
       <CaseStudiesSection caseStudies={caseStudies} />
@@ -191,8 +196,8 @@ export default async function SignalPage({ params }: PageProps) {
           linkedin_url: profile.linkedin_url,
           portfolio_url: profile.portfolio_url,
         }}
-        companyName={page.jobs.company_name}
-        roleTitle={page.jobs.role_title}
+        companyName={jobInfo.company_name}
+        roleTitle={jobInfo.role_title}
       />
 
       {/* Footer */}
