@@ -85,23 +85,44 @@ export default function PageEditorPage({ params }: PageProps) {
 
     setIsPublishing(true);
 
-    const supabase = createClient();
-    const { error } = await supabase
-      .from('signal_pages')
-      .update({ is_published: !page.is_published })
-      .eq('id', pageId);
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
 
-    if (!error) {
-      setPage((prev) => prev ? { ...prev, is_published: !prev.is_published } : null);
+      if (!user) {
+        alert('You must be logged in to publish');
+        return;
+      }
+
+      const newPublishedState = !page.is_published;
+
+      const { error } = await supabase
+        .from('signal_pages')
+        .update({ is_published: newPublishedState })
+        .eq('id', pageId)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Publish error:', error);
+        alert(`Failed to ${newPublishedState ? 'publish' : 'unpublish'}: ${error.message}`);
+        return;
+      }
+
+      setPage((prev) => prev ? { ...prev, is_published: newPublishedState } : null);
 
       // Also update job status
       await supabase
         .from('jobs')
-        .update({ status: page.is_published ? 'draft' : 'published' })
-        .eq('id', page.job_id);
-    }
+        .update({ status: newPublishedState ? 'published' : 'draft' })
+        .eq('id', page.job_id)
+        .eq('user_id', user.id);
 
-    setIsPublishing(false);
+    } catch (err) {
+      console.error('Publish error:', err);
+      alert('An error occurred while publishing');
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   const copyToClipboard = async () => {

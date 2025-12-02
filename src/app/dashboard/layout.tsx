@@ -32,15 +32,15 @@ export default async function DashboardLayout({
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 justify-between">
             <div className="flex">
-              <Link href="/dashboard" className="flex items-center gap-2">
+              <Link href="/dashboard" className="flex items-center">
                 <Image
                   src="/signalpage-logo.png"
                   alt="SignalPage"
-                  width={32}
-                  height={32}
-                  className="h-8 w-8"
+                  width={160}
+                  height={40}
+                  className="h-10 w-auto"
+                  priority
                 />
-                <span className="text-xl font-bold text-gray-900">SignalPage</span>
               </Link>
               <div className="ml-10 flex items-center space-x-4">
                 <Link
