@@ -7,26 +7,34 @@ export default function Home() {
     <div className="min-h-screen bg-white">
       {/* Navigation */}
       <nav className="border-b border-gray-100">
-        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center">
-            <Image
-              src="/signalpage-logo.png"
-              alt="SignalPage"
-              width={822}
-              height={234}
-              className="h-12 w-auto"
-              priority
-            />
-          </Link>
-          <div className="flex items-center gap-4">
-            <Link href="/faq" className="text-sm font-medium text-gray-600 hover:text-gray-900">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex h-16 sm:h-20 items-center justify-between">
+            <Link href="/" className="flex-shrink-0">
+              <Image
+                src="/signalpage-logo.png"
+                alt="SignalPage"
+                width={822}
+                height={234}
+                className="h-8 sm:h-10 md:h-12 w-auto"
+                priority
+              />
+            </Link>
+            <div className="flex items-center gap-2 sm:gap-4">
+              <Link href="/faq" className="hidden sm:inline text-sm font-medium text-gray-900 hover:text-gray-600">
+                How It Works
+              </Link>
+              <Link href="/auth/login">
+                <Button variant="ghost" className="text-xs sm:text-sm px-2 sm:px-4">Sign in</Button>
+              </Link>
+              <Link href="/auth/signup">
+                <Button variant="primary" className="text-xs sm:text-sm px-2 sm:px-4">Get Started</Button>
+              </Link>
+            </div>
+          </div>
+          {/* Mobile "How It Works" link */}
+          <div className="flex sm:hidden justify-center pb-3">
+            <Link href="/faq" className="text-sm font-medium text-gray-900 hover:text-gray-600">
               How It Works
-            </Link>
-            <Link href="/auth/login">
-              <Button variant="ghost">Sign in</Button>
-            </Link>
-            <Link href="/auth/signup">
-              <Button variant="primary">Get Started</Button>
             </Link>
           </div>
         </div>
