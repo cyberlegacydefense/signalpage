@@ -34,6 +34,7 @@ export default function PageEditorPage({ params }: PageProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showAICommentary, setShowAICommentary] = useState(true);
 
   useEffect(() => {
     async function loadPage() {
@@ -74,6 +75,7 @@ export default function PageEditorPage({ params }: PageProps) {
       }
 
       setPage(data as PageData);
+      setShowAICommentary(data.show_ai_commentary !== false);
       setIsLoading(false);
     }
 
@@ -130,6 +132,29 @@ export default function PageEditorPage({ params }: PageProps) {
     await navigator.clipboard.writeText(fullUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleToggleAICommentary = async () => {
+    if (!page) return;
+
+    const newValue = !showAICommentary;
+    setShowAICommentary(newValue);
+
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      await supabase
+        .from('signal_pages')
+        .update({ show_ai_commentary: newValue })
+        .eq('id', pageId)
+        .eq('user_id', user.id);
+    } catch (err) {
+      console.error('Error toggling AI commentary:', err);
+      setShowAICommentary(!newValue); // Revert on error
+    }
   };
 
   if (isLoading || !page) {
@@ -336,12 +361,39 @@ export default function PageEditorPage({ params }: PageProps) {
         {page.ai_commentary && (
           <Card>
             <CardHeader>
-              <CardTitle>AI Coach Commentary</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>AI Career Coach Insights</CardTitle>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <span className="text-sm text-gray-600">
+                    {showAICommentary ? 'Visible' : 'Hidden'}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={showAICommentary}
+                    onClick={handleToggleAICommentary}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      showAICommentary ? 'bg-blue-600' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        showAICommentary ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </label>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
+              <div className={`rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 p-4 ${!showAICommentary ? 'opacity-50' : ''}`}>
                 <p className="whitespace-pre-wrap text-gray-700">{page.ai_commentary}</p>
               </div>
+              {!showAICommentary && (
+                <p className="mt-2 text-sm text-gray-500">
+                  This section will not be visible on your published page.
+                </p>
+              )}
             </CardContent>
           </Card>
         )}

@@ -118,6 +118,7 @@ export interface SignalPage {
   plan_30_60_90: Plan306090;
   case_studies: CaseStudy[];
   ai_commentary?: string;
+  show_ai_commentary?: boolean;
 
   // Metadata
   generated_at: string;

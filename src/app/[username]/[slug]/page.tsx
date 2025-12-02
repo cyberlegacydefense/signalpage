@@ -194,7 +194,7 @@ export default async function SignalPage({ params }: PageProps) {
 
       <CaseStudiesSection caseStudies={caseStudies} />
 
-      {page.ai_commentary && (
+      {page.ai_commentary && page.show_ai_commentary !== false && (
         <AICommentarySection commentary={page.ai_commentary} />
       )}
 

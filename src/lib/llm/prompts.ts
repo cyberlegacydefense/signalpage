@@ -75,7 +75,14 @@ ${
 }
 
 export function buildGenerationContext(context: GenerationContext): string {
+  const firstName = context.user.full_name?.split(' ')[0] || 'the candidate';
+
   return `
+## Applicant Information
+**Name**: ${context.user.full_name || 'Not provided'}
+**First Name**: ${firstName}
+${context.user.headline ? `**Headline**: ${context.user.headline}` : ''}
+
 ${buildResumeContext(context.resume)}
 
 ${buildJobContext(context.job)}
@@ -249,15 +256,17 @@ Prioritize:
 3. Projects with impressive outcomes
 `;
 
-export const GENERATE_AI_COMMENTARY_PROMPT = `Write a brief (2-3 paragraphs) AI coach commentary section.
+export const GENERATE_AI_COMMENTARY_PROMPT = `Write a brief (2-3 paragraphs) AI Career Coach Insights section.
 
-This section explains the strategic alignment between the candidate and this opportunity. Include:
-1. Why this is a strong match based on career trajectory
-2. Specific ways the candidate's experience maps to company needs
+IMPORTANT: Use the applicant's first name (provided in the context above) throughout. Never use "the candidate" - always refer to them by their first name.
+
+This section explains the strategic alignment between this applicant and the opportunity. Include:
+1. Why this is a strong match based on their career trajectory
+2. Specific ways their experience maps to company needs
 3. Any relevant company context (recent news, initiatives) that makes this timely
 
-Write in first person as if you're the candidate's advocate explaining the match to a recruiter.
-Keep it conversational but professional.
+Write in third person as an objective career coach providing insights to a hiring manager about why [First Name] would be an excellent fit.
+Keep it conversational but professional. Start with something like "[First Name] brings..." or "What stands out about [First Name]..."
 `;
 
 export function createGenerationPrompt(
