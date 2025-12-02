@@ -36,9 +36,9 @@ export default async function DashboardLayout({
                 <Image
                   src="/signalpage-logo.png"
                   alt="SignalPage"
-                  width={160}
-                  height={40}
-                  className="h-10 w-auto"
+                  width={180}
+                  height={48}
+                  className="h-12 w-auto"
                   priority
                 />
               </Link>

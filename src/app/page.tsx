@@ -12,9 +12,9 @@ export default function Home() {
             <Image
               src="/signalpage-logo.png"
               alt="SignalPage"
-              width={180}
-              height={48}
-              className="h-12 w-auto"
+              width={200}
+              height={56}
+              className="h-14 w-auto"
               priority
             />
           </Link>
@@ -275,9 +275,9 @@ export default function Home() {
             <Image
               src="/signalpage-logo.png"
               alt="SignalPage"
-              width={140}
-              height={36}
-              className="h-9 w-auto"
+              width={160}
+              height={44}
+              className="h-11 w-auto"
             />
             <div className="flex items-center gap-6 text-sm">
               <Link href="/faq" className="text-gray-600 hover:text-gray-900">
