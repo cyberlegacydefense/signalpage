@@ -33,6 +33,7 @@ export default function PageEditorPage({ params }: PageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     async function loadPage() {
@@ -103,6 +104,13 @@ export default function PageEditorPage({ params }: PageProps) {
     setIsPublishing(false);
   };
 
+  const copyToClipboard = async () => {
+    const fullUrl = `${window.location.origin}/${username}/${page?.slug}`;
+    await navigator.clipboard.writeText(fullUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   if (isLoading || !page) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -120,36 +128,39 @@ export default function PageEditorPage({ params }: PageProps) {
 
   return (
     <div className="mx-auto max-w-4xl">
+      {/* Status Banner */}
+      {!page.is_published && (
+        <div className="mb-6 rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+          <div className="flex items-start gap-3">
+            <svg className="mt-0.5 h-5 w-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div className="flex-1">
+              <h3 className="font-medium text-yellow-800">Ready to Publish</h3>
+              <p className="mt-1 text-sm text-yellow-700">
+                Your page is complete and ready to share. Click &quot;Publish&quot; to make it publicly accessible, then copy the URL to include in your applications.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
             {page.jobs.role_title} @ {page.jobs.company_name}
           </h1>
-          <p className="mt-1 flex items-center gap-2 text-sm text-gray-600">
-            {page.is_published ? (
-              <>
-                <Badge variant="success">Published</Badge>
-                <a
-                  href={pageUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline"
-                >
-                  {process.env.NEXT_PUBLIC_APP_URL}{pageUrl}
-                </a>
-              </>
-            ) : (
-              <Badge variant="default">Draft</Badge>
-            )}
-          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <Badge variant={page.is_published ? 'success' : 'warning'}>
+              {page.is_published ? 'Published' : 'Ready to Publish'}
+            </Badge>
+          </div>
         </div>
         <div className="flex gap-3">
-          {page.is_published && (
-            <Link href={pageUrl} target="_blank">
-              <Button variant="outline">View Page</Button>
-            </Link>
-          )}
+          <Link href={pageUrl} target="_blank">
+            <Button variant="outline">Preview</Button>
+          </Link>
           <Button
             variant={page.is_published ? 'outline' : 'primary'}
             onClick={handlePublish}
@@ -159,6 +170,56 @@ export default function PageEditorPage({ params }: PageProps) {
           </Button>
         </div>
       </div>
+
+      {/* URL Card - Always visible */}
+      <Card className="mb-6">
+        <CardContent className="py-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex-1">
+              <p className="text-sm font-medium text-gray-700">Page URL</p>
+              <p className="mt-1 text-sm text-gray-600 break-all">
+                {typeof window !== 'undefined' ? window.location.origin : ''}{pageUrl}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={copyToClipboard}
+              >
+                {copied ? (
+                  <>
+                    <svg className="mr-1.5 h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <svg className="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                    </svg>
+                    Copy URL
+                  </>
+                )}
+              </Button>
+              <Link href={pageUrl} target="_blank">
+                <Button variant="outline" size="sm">
+                  <svg className="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  Open
+                </Button>
+              </Link>
+            </div>
+          </div>
+          {!page.is_published && (
+            <p className="mt-2 text-xs text-gray-500">
+              This URL will only be accessible to others after you publish the page.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Preview Sections */}
       <div className="space-y-6">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import {
   Button,
@@ -11,14 +11,19 @@ import {
   CardTitle,
   CardDescription,
   CardContent,
+  Select,
 } from '@/components/ui';
 import type { User, Resume, ParsedResume } from '@/types';
+import { RESUME_TAGS } from '@/types';
+
+const MAX_RESUMES = 5;
 
 export default function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -26,8 +31,10 @@ export default function ProfilePage() {
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string | 'new'>('new');
   const [resumeName, setResumeName] = useState('');
+  const [resumeTag, setResumeTag] = useState('');
   const [resumeText, setResumeText] = useState('');
   const [currentResume, setCurrentResume] = useState<Resume | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadData();
@@ -78,13 +85,66 @@ export default function ProfilePage() {
     if (id === 'new') {
       setCurrentResume(null);
       setResumeName('');
+      setResumeTag('');
       setResumeText('');
     } else {
       const resume = resumes.find(r => r.id === id);
       if (resume) {
         setCurrentResume(resume);
         setResumeName(resume.name || '');
+        setResumeTag(resume.tag || '');
         setResumeText(resume.raw_text || '');
+      }
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check file type
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain',
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      setError('Please upload a PDF, DOC, DOCX, or TXT file');
+      return;
+    }
+
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('File size must be less than 5MB');
+      return;
+    }
+
+    setIsUploading(true);
+    setError('');
+
+    try {
+      // For text files, read directly
+      if (file.type === 'text/plain') {
+        const text = await file.text();
+        setResumeText(text);
+        setSuccess('File loaded successfully! Click "Save & Parse" to process.');
+      } else {
+        // For PDF/DOC files, we need to extract text
+        // For now, we'll use a simple approach - ask user to paste text
+        // In production, you'd use a document parsing service
+        setError(
+          'PDF/DOC parsing coming soon. For now, please copy the text from your document and paste it in the text area below.'
+        );
+      }
+    } catch (err) {
+      setError('Failed to read file. Please try pasting the text instead.');
+    } finally {
+      setIsUploading(false);
+      // Reset the file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
       }
     }
   };
@@ -135,6 +195,12 @@ export default function ProfilePage() {
       return;
     }
 
+    // Check max resumes limit for new resumes
+    if (selectedResumeId === 'new' && resumes.length >= MAX_RESUMES) {
+      setError(`You can only have up to ${MAX_RESUMES} resumes. Please delete one to add another.`);
+      return;
+    }
+
     setIsParsing(true);
     setError('');
 
@@ -163,6 +229,7 @@ export default function ProfilePage() {
           .insert({
             user_id: user.id,
             name: resumeName,
+            tag: resumeTag || null,
             raw_text: resumeText,
             parsed_data: parsedData,
             is_primary: resumes.length === 0, // First resume is primary
@@ -181,6 +248,7 @@ export default function ProfilePage() {
           .from('resumes')
           .update({
             name: resumeName,
+            tag: resumeTag || null,
             raw_text: resumeText,
             parsed_data: parsedData,
           })
@@ -191,11 +259,11 @@ export default function ProfilePage() {
         setResumes(prev =>
           prev.map(r =>
             r.id === selectedResumeId
-              ? { ...r, name: resumeName, raw_text: resumeText, parsed_data: parsedData }
+              ? { ...r, name: resumeName, tag: resumeTag || undefined, raw_text: resumeText, parsed_data: parsedData }
               : r
           )
         );
-        setCurrentResume(prev => prev ? { ...prev, parsed_data: parsedData } : null);
+        setCurrentResume(prev => prev ? { ...prev, parsed_data: parsedData, tag: resumeTag || undefined } : null);
       }
 
       setSuccess('Resume saved and parsed successfully!');
@@ -387,26 +455,28 @@ export default function ProfilePage() {
       {/* Resume Section */}
       <Card>
         <CardHeader>
-          <CardTitle>Your Resumes</CardTitle>
+          <CardTitle>Your Resumes ({resumes.length}/{MAX_RESUMES})</CardTitle>
           <CardDescription>
-            Manage multiple resumes for different types of roles. The primary resume
-            is used by default when generating new pages.
+            Manage up to {MAX_RESUMES} resumes for different types of roles. Tag each resume
+            to easily identify them. The primary resume is used by default when generating new pages.
           </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-4">
           {/* Resume Selector */}
           <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => handleResumeSelect('new')}
-              className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
-                selectedResumeId === 'new'
-                  ? 'border-blue-500 bg-blue-50 text-blue-700'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              + New Resume
-            </button>
+            {resumes.length < MAX_RESUMES && (
+              <button
+                onClick={() => handleResumeSelect('new')}
+                className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
+                  selectedResumeId === 'new'
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                + New Resume
+              </button>
+            )}
             {resumes.map((resume) => (
               <button
                 key={resume.id}
@@ -417,28 +487,84 @@ export default function ProfilePage() {
                     : 'border-gray-200 hover:border-gray-300'
                 }`}
               >
-                {resume.name || 'Untitled Resume'}
-                {resume.is_primary && (
-                  <span className="ml-1 text-xs text-green-600">(Primary)</span>
-                )}
+                <span className="flex items-center gap-1.5">
+                  {resume.name || 'Untitled Resume'}
+                  {resume.tag && (
+                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
+                      {RESUME_TAGS.find(t => t.value === resume.tag)?.label || resume.tag}
+                    </span>
+                  )}
+                  {resume.is_primary && (
+                    <span className="text-xs text-green-600">(Primary)</span>
+                  )}
+                </span>
               </button>
             ))}
           </div>
 
-          {/* Resume Name */}
-          <Input
-            label="Resume Name"
-            value={resumeName}
-            onChange={(e) => setResumeName(e.target.value)}
-            placeholder="e.g., Technical Resume, Management Resume, etc."
-          />
+          {/* Resume Name and Tag */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input
+              label="Resume Name"
+              value={resumeName}
+              onChange={(e) => setResumeName(e.target.value)}
+              placeholder="e.g., Technical Resume, Management Resume"
+            />
+            <Select
+              label="Resume Tag"
+              value={resumeTag}
+              onChange={(e) => setResumeTag(e.target.value)}
+              options={[{ value: '', label: 'Select a tag...' }, ...RESUME_TAGS.map(t => ({ value: t.value, label: t.label }))]}
+              helperText="Categorize your resume by role type"
+            />
+          </div>
+
+          {/* File Upload */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              Upload Resume
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.txt"
+                onChange={handleFileUpload}
+                className="hidden"
+                id="resume-upload"
+              />
+              <label
+                htmlFor="resume-upload"
+                className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 ${
+                  isUploading ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+              >
+                {isUploading ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    Upload File
+                  </>
+                )}
+              </label>
+              <span className="text-sm text-gray-500">
+                PDF, DOC, DOCX, or TXT (max 5MB)
+              </span>
+            </div>
+          </div>
 
           {/* Resume Text */}
           <Textarea
             label="Resume Text"
             value={resumeText}
             onChange={(e) => setResumeText(e.target.value)}
-            placeholder="Paste your resume content here (plain text works best)..."
+            placeholder="Paste your resume content here or upload a file above..."
             className="min-h-[300px] font-mono text-sm"
           />
 

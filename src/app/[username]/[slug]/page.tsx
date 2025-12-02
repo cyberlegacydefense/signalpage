@@ -135,13 +135,21 @@ export default async function SignalPage({ params }: PageProps) {
     <div className="min-h-screen bg-white">
       {/* Preview banner for unpublished pages */}
       {isOwner && !page.is_published && (
-        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-3 text-center">
-          <p className="text-sm text-yellow-800">
-            <strong>Preview Mode</strong> - This page is not published yet. Only you can see it.
-            <a href={`/dashboard/pages/${page.id}`} className="ml-2 underline hover:text-yellow-900">
-              Go to editor to publish
+        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-3">
+          <div className="mx-auto max-w-4xl flex flex-col sm:flex-row items-center justify-between gap-3">
+            <p className="text-sm text-yellow-800">
+              <strong>Preview Mode</strong> - This page is not published yet. Only you can see it.
+            </p>
+            <a
+              href={`/dashboard/pages/${page.id}`}
+              className="inline-flex items-center gap-2 rounded-lg bg-yellow-600 px-4 py-2 text-sm font-medium text-white hover:bg-yellow-700 transition-colors"
+            >
+              Go to Editor to Publish
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
             </a>
-          </p>
+          </div>
         </div>
       )}
 

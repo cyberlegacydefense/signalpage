@@ -19,6 +19,7 @@ export interface Resume {
   id: string;
   user_id: string;
   name?: string;
+  tag?: string;
   raw_text: string;
   parsed_data: ParsedResume;
   file_url?: string;
@@ -26,6 +27,17 @@ export interface Resume {
   created_at: string;
   updated_at: string;
 }
+
+export const RESUME_TAGS = [
+  { value: 'technical', label: 'Technical' },
+  { value: 'ai', label: 'AI / ML' },
+  { value: 'data', label: 'Data' },
+  { value: 'management', label: 'Management' },
+  { value: 'sales', label: 'Sales' },
+  { value: 'marketing', label: 'Marketing' },
+  { value: 'architect', label: 'Architect' },
+  { value: 'general', label: 'General' },
+] as const;
 
 export interface ParsedResume {
   summary?: string;

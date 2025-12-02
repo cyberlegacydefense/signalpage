@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { createClient } from '@/lib/supabase/server';
 
 // Force dynamic rendering - don't try to prerender at build time
@@ -31,7 +32,14 @@ export default async function DashboardLayout({
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 justify-between">
             <div className="flex">
-              <Link href="/dashboard" className="flex items-center">
+              <Link href="/dashboard" className="flex items-center gap-2">
+                <Image
+                  src="/signalpage-logo.png"
+                  alt="SignalPage"
+                  width={32}
+                  height={32}
+                  className="h-8 w-8"
+                />
                 <span className="text-xl font-bold text-gray-900">SignalPage</span>
               </Link>
               <div className="ml-10 flex items-center space-x-4">

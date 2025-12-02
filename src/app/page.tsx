@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { Button } from '@/components/ui';
 
 export default function Home() {
@@ -7,10 +8,20 @@ export default function Home() {
       {/* Navigation */}
       <nav className="border-b border-gray-100">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <Link href="/" className="text-xl font-bold text-gray-900">
-            SignalPage
+          <Link href="/" className="flex items-center gap-2">
+            <Image
+              src="/signalpage-logo.png"
+              alt="SignalPage"
+              width={32}
+              height={32}
+              className="h-8 w-8"
+            />
+            <span className="text-xl font-bold text-gray-900">SignalPage</span>
           </Link>
           <div className="flex items-center gap-4">
+            <Link href="/faq" className="text-sm font-medium text-gray-600 hover:text-gray-900">
+              How It Works
+            </Link>
             <Link href="/auth/login">
               <Button variant="ghost">Sign in</Button>
             </Link>
@@ -258,9 +269,32 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-gray-100 px-4 py-8">
-        <div className="mx-auto max-w-6xl text-center text-sm text-gray-500">
-          <p>&copy; {new Date().getFullYear()} SignalPage. Stand out, don&apos;t blend in.</p>
+      <footer className="border-t border-gray-200 bg-gray-50 px-4 py-12">
+        <div className="mx-auto max-w-6xl">
+          <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
+            <div className="flex items-center gap-2">
+              <Image
+                src="/signalpage-logo.png"
+                alt="SignalPage"
+                width={24}
+                height={24}
+                className="h-6 w-6"
+              />
+              <span className="font-semibold text-gray-900">SignalPage</span>
+            </div>
+            <div className="flex items-center gap-6 text-sm">
+              <Link href="/faq" className="text-gray-600 hover:text-gray-900">
+                FAQ
+              </Link>
+              <Link href="/privacy" className="text-gray-600 hover:text-gray-900">
+                Privacy Policy
+              </Link>
+            </div>
+          </div>
+          <div className="mt-8 border-t border-gray-200 pt-8 text-center text-sm text-gray-500">
+            <p>&copy; {new Date().getFullYear()} SignalPage. A product of Applied AI Ventures.</p>
+            <p className="mt-1">Stand out, don&apos;t blend in.</p>
+          </div>
         </div>
       </footer>
     </div>
