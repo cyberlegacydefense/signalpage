@@ -10,14 +10,14 @@ export default function PrivacyPage() {
     <div className="min-h-screen bg-white">
       {/* Navigation */}
       <nav className="border-b border-gray-100">
-        <div className="mx-auto flex h-28 sm:h-36 md:h-44 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex h-32 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link href="/" className="flex items-center">
             <Image
               src="/signalpage-logo.png"
               alt="SignalPage"
               width={836}
               height={248}
-              className="h-14 sm:h-20 md:h-28 w-auto"
+              className="h-20 w-auto"
               priority
             />
           </Link>

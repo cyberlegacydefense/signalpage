@@ -30,7 +30,7 @@ export default async function DashboardLayout({
       {/* Navigation */}
       <nav className="border-b border-gray-200 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-28 sm:h-36 justify-between">
+          <div className="flex h-32 justify-between">
             <div className="flex">
               <Link href="/dashboard" className="flex items-center">
                 <Image
@@ -38,7 +38,7 @@ export default async function DashboardLayout({
                   alt="SignalPage"
                   width={836}
                   height={248}
-                  className="h-14 sm:h-20 md:h-24 w-auto"
+                  className="h-20 w-auto"
                   priority
                 />
               </Link>
