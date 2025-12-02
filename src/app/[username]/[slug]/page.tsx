@@ -74,6 +74,9 @@ export default async function SignalPage({ params }: PageProps) {
   const { username, slug } = await params;
   const supabase = await createClient();
 
+  // Get current user (if logged in)
+  const { data: { user: currentUser } } = await supabase.auth.getUser();
+
   // Get user profile
   const { data: profile } = await supabase
     .from('profiles')
@@ -85,8 +88,11 @@ export default async function SignalPage({ params }: PageProps) {
     notFound();
   }
 
-  // Get the signal page
-  const { data: page } = await supabase
+  // Check if current user is the owner
+  const isOwner = currentUser?.id === profile.id;
+
+  // Get the signal page - owners can see unpublished, others only published
+  const query = supabase
     .from('signal_pages')
     .select(`
       *,
@@ -97,9 +103,14 @@ export default async function SignalPage({ params }: PageProps) {
       )
     `)
     .eq('user_id', profile.id)
-    .eq('slug', slug)
-    .eq('is_published', true)
-    .single();
+    .eq('slug', slug);
+
+  // Only filter by is_published if not the owner
+  if (!isOwner) {
+    query.eq('is_published', true);
+  }
+
+  const { data: page } = await query.single();
 
   if (!page) {
     notFound();
@@ -122,6 +133,18 @@ export default async function SignalPage({ params }: PageProps) {
 
   return (
     <div className="min-h-screen bg-white">
+      {/* Preview banner for unpublished pages */}
+      {isOwner && !page.is_published && (
+        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-3 text-center">
+          <p className="text-sm text-yellow-800">
+            <strong>Preview Mode</strong> - This page is not published yet. Only you can see it.
+            <a href={`/dashboard/pages/${page.id}`} className="ml-2 underline hover:text-yellow-900">
+              Go to editor to publish
+            </a>
+          </p>
+        </div>
+      )}
+
       <HeroSection
         hero={hero}
         user={{

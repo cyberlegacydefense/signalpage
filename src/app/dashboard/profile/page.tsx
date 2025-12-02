@@ -12,55 +12,82 @@ import {
   CardDescription,
   CardContent,
 } from '@/components/ui';
-import type { User, Resume } from '@/types';
+import type { User, Resume, ParsedResume } from '@/types';
 
 export default function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   const [profile, setProfile] = useState<Partial<User>>({});
-  const [resume, setResume] = useState<Partial<Resume>>({});
+  const [resumes, setResumes] = useState<Resume[]>([]);
+  const [selectedResumeId, setSelectedResumeId] = useState<string | 'new'>('new');
+  const [resumeName, setResumeName] = useState('');
   const [resumeText, setResumeText] = useState('');
+  const [currentResume, setCurrentResume] = useState<Resume | null>(null);
 
   useEffect(() => {
-    async function loadData() {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) return;
-
-      // Load profile
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (profileData) {
-        setProfile(profileData);
-      }
-
-      // Load resume
-      const { data: resumeData } = await supabase
-        .from('resumes')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('is_primary', true)
-        .single();
-
-      if (resumeData) {
-        setResume(resumeData);
-        setResumeText(resumeData.raw_text || '');
-      }
-
-      setIsLoading(false);
-    }
-
     loadData();
   }, []);
+
+  async function loadData() {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    // Load profile
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    if (profileData) {
+      setProfile(profileData);
+    }
+
+    // Load all resumes
+    const { data: resumesData } = await supabase
+      .from('resumes')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (resumesData && resumesData.length > 0) {
+      setResumes(resumesData);
+      // Select the primary resume or the first one
+      const primaryResume = resumesData.find(r => r.is_primary) || resumesData[0];
+      setSelectedResumeId(primaryResume.id);
+      setCurrentResume(primaryResume);
+      setResumeName(primaryResume.name || '');
+      setResumeText(primaryResume.raw_text || '');
+    }
+
+    setIsLoading(false);
+  }
+
+  const handleResumeSelect = (id: string | 'new') => {
+    setSelectedResumeId(id);
+    setError('');
+    setSuccess('');
+
+    if (id === 'new') {
+      setCurrentResume(null);
+      setResumeName('');
+      setResumeText('');
+    } else {
+      const resume = resumes.find(r => r.id === id);
+      if (resume) {
+        setCurrentResume(resume);
+        setResumeName(resume.name || '');
+        setResumeText(resume.raw_text || '');
+      }
+    }
+  };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,6 +130,11 @@ export default function ProfilePage() {
       return;
     }
 
+    if (!resumeName.trim() && selectedResumeId === 'new') {
+      setError('Please enter a name for this resume');
+      return;
+    }
+
     setIsParsing(true);
     setError('');
 
@@ -119,31 +151,121 @@ export default function ProfilePage() {
 
       const { parsedData } = await response.json();
 
-      // Save to database
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) throw new Error('Not authenticated');
 
-      // Upsert resume
-      const { error: resumeError } = await supabase
-        .from('resumes')
-        .upsert({
-          id: resume.id || undefined,
-          user_id: user.id,
-          raw_text: resumeText,
-          parsed_data: parsedData,
-          is_primary: true,
-        });
+      if (selectedResumeId === 'new') {
+        // Create new resume
+        const { data: newResume, error: insertError } = await supabase
+          .from('resumes')
+          .insert({
+            user_id: user.id,
+            name: resumeName,
+            raw_text: resumeText,
+            parsed_data: parsedData,
+            is_primary: resumes.length === 0, // First resume is primary
+          })
+          .select()
+          .single();
 
-      if (resumeError) throw resumeError;
+        if (insertError) throw insertError;
 
-      setResume((prev) => ({ ...prev, parsed_data: parsedData }));
-      setSuccess('Resume parsed and saved successfully!');
+        setResumes(prev => [newResume, ...prev]);
+        setSelectedResumeId(newResume.id);
+        setCurrentResume(newResume);
+      } else {
+        // Update existing resume
+        const { error: updateError } = await supabase
+          .from('resumes')
+          .update({
+            name: resumeName,
+            raw_text: resumeText,
+            parsed_data: parsedData,
+          })
+          .eq('id', selectedResumeId);
+
+        if (updateError) throw updateError;
+
+        setResumes(prev =>
+          prev.map(r =>
+            r.id === selectedResumeId
+              ? { ...r, name: resumeName, raw_text: resumeText, parsed_data: parsedData }
+              : r
+          )
+        );
+        setCurrentResume(prev => prev ? { ...prev, parsed_data: parsedData } : null);
+      }
+
+      setSuccess('Resume saved and parsed successfully!');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to parse resume');
     } finally {
       setIsParsing(false);
+    }
+  };
+
+  const handleSetPrimary = async (resumeId: string) => {
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) throw new Error('Not authenticated');
+
+      // Set all resumes to non-primary
+      await supabase
+        .from('resumes')
+        .update({ is_primary: false })
+        .eq('user_id', user.id);
+
+      // Set selected resume as primary
+      await supabase
+        .from('resumes')
+        .update({ is_primary: true })
+        .eq('id', resumeId);
+
+      setResumes(prev =>
+        prev.map(r => ({ ...r, is_primary: r.id === resumeId }))
+      );
+
+      setSuccess('Primary resume updated!');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update primary resume');
+    }
+  };
+
+  const handleDeleteResume = async (resumeId: string) => {
+    if (!confirm('Are you sure you want to delete this resume?')) return;
+
+    setIsDeleting(true);
+    try {
+      const supabase = createClient();
+
+      const { error: deleteError } = await supabase
+        .from('resumes')
+        .delete()
+        .eq('id', resumeId);
+
+      if (deleteError) throw deleteError;
+
+      const updatedResumes = resumes.filter(r => r.id !== resumeId);
+      setResumes(updatedResumes);
+
+      // If we deleted the selected resume, select new or first available
+      if (selectedResumeId === resumeId) {
+        if (updatedResumes.length > 0) {
+          handleResumeSelect(updatedResumes[0].id);
+        } else {
+          handleResumeSelect('new');
+        }
+      }
+
+      setSuccess('Resume deleted successfully!');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete resume');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -154,6 +276,8 @@ export default function ProfilePage() {
       </div>
     );
   }
+
+  const parsedData = currentResume?.parsed_data as ParsedResume | undefined;
 
   return (
     <div className="mx-auto max-w-2xl space-y-8">
@@ -263,14 +387,53 @@ export default function ProfilePage() {
       {/* Resume Section */}
       <Card>
         <CardHeader>
-          <CardTitle>Your Resume</CardTitle>
+          <CardTitle>Your Resumes</CardTitle>
           <CardDescription>
-            Paste your resume text below. Our AI will parse it to extract your
-            experience, skills, and achievements for use in your landing pages.
+            Manage multiple resumes for different types of roles. The primary resume
+            is used by default when generating new pages.
           </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-4">
+          {/* Resume Selector */}
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => handleResumeSelect('new')}
+              className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
+                selectedResumeId === 'new'
+                  ? 'border-blue-500 bg-blue-50 text-blue-700'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              + New Resume
+            </button>
+            {resumes.map((resume) => (
+              <button
+                key={resume.id}
+                onClick={() => handleResumeSelect(resume.id)}
+                className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
+                  selectedResumeId === resume.id
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                {resume.name || 'Untitled Resume'}
+                {resume.is_primary && (
+                  <span className="ml-1 text-xs text-green-600">(Primary)</span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Resume Name */}
+          <Input
+            label="Resume Name"
+            value={resumeName}
+            onChange={(e) => setResumeName(e.target.value)}
+            placeholder="e.g., Technical Resume, Management Resume, etc."
+          />
+
+          {/* Resume Text */}
           <Textarea
             label="Resume Text"
             value={resumeText}
@@ -279,26 +442,53 @@ export default function ProfilePage() {
             className="min-h-[300px] font-mono text-sm"
           />
 
-          <div className="flex items-center justify-between">
+          {/* Actions */}
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="text-sm text-gray-500">
-              {resume.parsed_data ? (
+              {parsedData ? (
                 <span className="text-green-600">
-                  Resume parsed: {(resume.parsed_data as { experiences?: unknown[] }).experiences?.length || 0} experiences,{' '}
-                  {(resume.parsed_data as { skills?: unknown[] }).skills?.length || 0} skills detected
+                  Parsed: {parsedData.experiences?.length || 0} experiences,{' '}
+                  {parsedData.skills?.length || 0} skills detected
                 </span>
               ) : (
-                <span>No resume parsed yet</span>
+                <span>Not parsed yet</span>
               )}
             </div>
 
-            <Button
-              type="button"
-              variant="primary"
-              onClick={handleParseResume}
-              isLoading={isParsing}
-            >
-              {resume.parsed_data ? 'Re-parse Resume' : 'Parse Resume'}
-            </Button>
+            <div className="flex gap-2">
+              {selectedResumeId !== 'new' && currentResume && (
+                <>
+                  {!currentResume.is_primary && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleSetPrimary(currentResume.id)}
+                    >
+                      Set as Primary
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDeleteResume(currentResume.id)}
+                    disabled={isDeleting}
+                    className="text-red-600 hover:bg-red-50"
+                  >
+                    Delete
+                  </Button>
+                </>
+              )}
+              <Button
+                type="button"
+                variant="primary"
+                onClick={handleParseResume}
+                isLoading={isParsing}
+              >
+                {selectedResumeId === 'new' ? 'Save & Parse' : 'Update & Parse'}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
