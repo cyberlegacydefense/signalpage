@@ -80,13 +80,14 @@ export default async function SignalPage({ params }: PageProps) {
   const { data: { user: currentUser } } = await supabase.auth.getUser();
 
   // Get user profile
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('*')
     .eq('username', username)
     .single();
 
   if (!profile) {
+    console.error('Profile not found:', { username, error: profileError });
     notFound();
   }
 
@@ -112,9 +113,17 @@ export default async function SignalPage({ params }: PageProps) {
     query.eq('is_published', true);
   }
 
-  const { data: page } = await query.single();
+  const { data: page, error: pageError } = await query.single();
 
   if (!page || !page.jobs) {
+    console.error('Page not found:', {
+      username,
+      slug,
+      profileId: profile.id,
+      isOwner,
+      page,
+      error: pageError
+    });
     notFound();
   }
 
