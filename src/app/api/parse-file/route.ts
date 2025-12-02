@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { extractText } from 'unpdf';
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,17 +11,27 @@ export async function POST(request: NextRequest) {
     }
 
     const fileType = file.type;
+    console.log('Processing file:', file.name, 'Type:', fileType, 'Size:', file.size);
+
     let text = '';
 
     if (fileType === 'text/plain') {
       text = await file.text();
     } else if (fileType === 'application/pdf') {
-      // Use require for CommonJS compatibility with pdf-parse
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pdfParse = require('pdf-parse');
-      const buffer = Buffer.from(await file.arrayBuffer());
-      const pdfData = await pdfParse(buffer);
-      text = pdfData.text;
+      try {
+        const buffer = await file.arrayBuffer();
+        console.log('PDF buffer size:', buffer.byteLength);
+        const result = await extractText(buffer);
+        // unpdf returns text as array of strings (one per page)
+        text = Array.isArray(result.text) ? result.text.join('\n\n') : String(result.text);
+        console.log('PDF parsed successfully, text length:', text.length);
+      } catch (pdfError) {
+        console.error('PDF parsing error:', pdfError);
+        return NextResponse.json(
+          { error: 'Failed to parse PDF. The file may be corrupted, password-protected, or image-based. Please try copying and pasting the text.' },
+          { status: 400 }
+        );
+      }
     } else if (
       fileType === 'application/msword' ||
       fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
