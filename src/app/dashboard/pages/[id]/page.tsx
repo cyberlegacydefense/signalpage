@@ -38,6 +38,7 @@ export default function PageEditorPage({ params }: PageProps) {
   const [showAICommentary, setShowAICommentary] = useState(true);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [isRecalculatingScore, setIsRecalculatingScore] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [analytics, setAnalytics] = useState<{ views: number; uniqueViews: number } | null>(null);
 
   useEffect(() => {
@@ -227,6 +228,55 @@ export default function PageEditorPage({ params }: PageProps) {
       alert('Failed to recalculate match score. Please try again.');
     } finally {
       setIsRecalculatingScore(false);
+    }
+  };
+
+  const handleDeletePage = async () => {
+    if (!page) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete the page for "${page.jobs.role_title} @ ${page.jobs.company_name}"?\n\nThis action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        alert('You must be logged in');
+        return;
+      }
+
+      // Delete the signal page (job will be orphaned but that's ok)
+      const { error: pageError } = await supabase
+        .from('signal_pages')
+        .delete()
+        .eq('id', pageId)
+        .eq('user_id', user.id);
+
+      if (pageError) throw pageError;
+
+      // Also delete the job
+      const { error: jobError } = await supabase
+        .from('jobs')
+        .delete()
+        .eq('id', page.job_id)
+        .eq('user_id', user.id);
+
+      if (jobError) {
+        console.error('Error deleting job:', jobError);
+        // Don't throw - page is already deleted
+      }
+
+      router.push('/dashboard');
+    } catch (err) {
+      console.error('Delete error:', err);
+      alert('Failed to delete page. Please try again.');
+      setIsDeleting(false);
     }
   };
 
@@ -651,6 +701,48 @@ export default function PageEditorPage({ params }: PageProps) {
                 No views yet. Share your page URL to start getting visitors.
               </p>
             )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Danger Zone */}
+      <div className="mt-8">
+        <Card className="border-red-200">
+          <CardHeader>
+            <CardTitle className="text-red-600">Danger Zone</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium text-gray-900">Delete this page</p>
+                <p className="text-sm text-gray-500">
+                  Once deleted, this page and all its data cannot be recovered.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleDeletePage}
+                disabled={isDeleting}
+                className="border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400"
+              >
+                {isDeleting ? (
+                  <>
+                    <svg className="mr-1.5 h-4 w-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <svg className="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Delete Page
+                  </>
+                )}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

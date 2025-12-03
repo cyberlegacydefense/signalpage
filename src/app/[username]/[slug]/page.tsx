@@ -102,7 +102,9 @@ export default async function SignalPage({ params }: PageProps) {
       jobs (
         id,
         role_title,
-        company_name
+        company_name,
+        recruiter_name,
+        hiring_manager_name
       )
     `)
     .eq('user_id', profile.id)
@@ -195,7 +197,11 @@ export default async function SignalPage({ params }: PageProps) {
       <CaseStudiesSection caseStudies={caseStudies} />
 
       {page.ai_commentary && page.show_ai_commentary !== false && (
-        <AICommentarySection commentary={page.ai_commentary} />
+        <AICommentarySection
+          commentary={page.ai_commentary}
+          recruiterName={page.jobs.recruiter_name}
+          hiringManagerName={page.jobs.hiring_manager_name}
+        />
       )}
 
       <CTASection

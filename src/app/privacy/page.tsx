@@ -185,7 +185,7 @@ export default function PrivacyPage() {
             </p>
             <p className="text-gray-600 mb-4">
               <strong>Applied AI Ventures</strong><br />
-              Email: privacy@signalpage.com
+              Email: <a href="mailto:info@signalpage.ai" className="text-blue-600 hover:underline">info@signalpage.ai</a>
             </p>
           </div>
         </div>

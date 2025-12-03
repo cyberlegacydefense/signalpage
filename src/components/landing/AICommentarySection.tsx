@@ -1,9 +1,17 @@
 interface AICommentarySectionProps {
   commentary: string;
+  recruiterName?: string | null;
+  hiringManagerName?: string | null;
 }
 
-export function AICommentarySection({ commentary }: AICommentarySectionProps) {
+export function AICommentarySection({ commentary, recruiterName, hiringManagerName }: AICommentarySectionProps) {
   if (!commentary) return null;
+
+  // Build the title with personalization
+  const recipientName = recruiterName || hiringManagerName;
+  const title = recipientName
+    ? `A Note for ${recipientName}`
+    : 'AI Career Coach Insights';
 
   return (
     <section className="bg-gradient-to-br from-blue-50 to-indigo-50 px-4 py-16 sm:py-20">
@@ -20,7 +28,7 @@ export function AICommentarySection({ commentary }: AICommentarySectionProps) {
             </svg>
           </div>
           <h2 className="text-xl font-bold text-gray-900">
-            AI Career Coach Insights
+            {title}
           </h2>
         </div>
 
