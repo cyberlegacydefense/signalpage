@@ -267,6 +267,8 @@ This section explains the strategic alignment between this applicant and the opp
 
 Write in third person as an objective career coach providing insights to a hiring manager about why [First Name] would be an excellent fit.
 Keep it conversational but professional. Start with something like "[First Name] brings..." or "What stands out about [First Name]..."
+
+IMPORTANT: Return ONLY plain text paragraphs. Do NOT wrap in JSON, markdown code blocks, or any other formatting. Just write the paragraphs directly.
 `;
 
 export function createGenerationPrompt(

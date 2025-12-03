@@ -167,7 +167,36 @@ export async function generateAICommentary(
   ];
 
   const result = await client.complete({ messages, config });
-  return result.content;
+  let content = result.content;
+
+  // Clean up if LLM returned JSON or markdown formatting
+  // Try to extract text if wrapped in JSON
+  if (content.trim().startsWith('{') || content.trim().startsWith('```')) {
+    // Remove markdown code blocks
+    content = content.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+
+    // Try to parse as JSON and extract the text value
+    try {
+      const parsed = JSON.parse(content.trim());
+      // Look for common keys that might contain the text
+      const textValue = parsed.AI_Career_Coach_Insights ||
+                       parsed.ai_commentary ||
+                       parsed.commentary ||
+                       parsed.content ||
+                       parsed.text ||
+                       (typeof parsed === 'string' ? parsed : null);
+      if (textValue && typeof textValue === 'string') {
+        content = textValue;
+      }
+    } catch {
+      // If JSON parsing fails, just use the original content
+    }
+  }
+
+  // Clean up escaped newlines
+  content = content.replace(/\\n/g, '\n');
+
+  return content;
 }
 
 export interface FullPageGeneration {
