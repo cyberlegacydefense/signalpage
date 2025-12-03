@@ -90,6 +90,7 @@ export default function NewJobPage() {
     company_name: '',
     role_title: '',
     job_description: '',
+    additional_notes: '',
     company_url: '',
     job_posting_url: '',
     seniority_level: 'mid' as SeniorityLevel,
@@ -97,6 +98,46 @@ export default function NewJobPage() {
     recruiter_name: '',
     hiring_manager_name: '',
   });
+
+  const [isFetchingJob, setIsFetchingJob] = useState(false);
+  const [fetchError, setFetchError] = useState('');
+  const [fetchSuccess, setFetchSuccess] = useState('');
+
+  const handleFetchJobPosting = async () => {
+    if (!formData.job_posting_url) {
+      setFetchError('Please enter a job posting URL first');
+      return;
+    }
+
+    setIsFetchingJob(true);
+    setFetchError('');
+    setFetchSuccess('');
+
+    try {
+      const response = await fetch('/api/fetch-job-posting', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: formData.job_posting_url }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setFetchError(data.error || 'Failed to fetch job posting');
+        return;
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        job_description: data.jobDescription,
+      }));
+      setFetchSuccess(data.note || 'Job description extracted successfully!');
+    } catch (err) {
+      setFetchError('Failed to fetch job posting. Please copy and paste the job description manually.');
+    } finally {
+      setIsFetchingJob(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,14 +153,18 @@ export default function NewJobPage() {
         return;
       }
 
-      // Create the job
+      // Create the job - combine job description with additional notes if provided
+      const fullJobDescription = formData.additional_notes
+        ? `${formData.job_description}\n\n--- Additional Notes ---\n${formData.additional_notes}`
+        : formData.job_description;
+
       const { data: job, error: jobError } = await supabase
         .from('jobs')
         .insert({
           user_id: user.id,
           company_name: formData.company_name,
           role_title: formData.role_title,
-          job_description: formData.job_description,
+          job_description: fullJobDescription,
           company_url: formData.company_url || null,
           job_posting_url: formData.job_posting_url || null,
           seniority_level: formData.seniority_level,
@@ -307,43 +352,115 @@ export default function NewJobPage() {
               </div>
             </div>
 
+            {/* Job Posting URL with Fetch */}
+            <div className="rounded-lg border border-gray-200 p-4">
+              <h4 className="text-sm font-medium text-gray-900 mb-3">
+                Job Posting
+              </h4>
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Input
+                      label="Job Posting URL"
+                      type="url"
+                      value={formData.job_posting_url}
+                      onChange={(e) => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          job_posting_url: e.target.value,
+                        }));
+                        setFetchError('');
+                        setFetchSuccess('');
+                      }}
+                      placeholder="https://linkedin.com/jobs/... or https://company.com/careers/..."
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleFetchJobPosting}
+                      disabled={isFetchingJob || !formData.job_posting_url}
+                      className="whitespace-nowrap"
+                    >
+                      {isFetchingJob ? (
+                        <>
+                          <svg className="mr-1.5 h-4 w-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          Fetching...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                          </svg>
+                          Fetch
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+                {fetchError && (
+                  <div className="rounded-md bg-yellow-50 p-3 text-sm text-yellow-800">
+                    <div className="flex items-start gap-2">
+                      <svg className="mt-0.5 h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      {fetchError}
+                    </div>
+                  </div>
+                )}
+                {fetchSuccess && (
+                  <div className="rounded-md bg-green-50 p-3 text-sm text-green-800">
+                    <div className="flex items-start gap-2">
+                      <svg className="mt-0.5 h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      {fetchSuccess}
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-gray-500">
+                  Enter a job posting URL and click Fetch to auto-populate the description, or paste it manually below.
+                </p>
+              </div>
+            </div>
+
             <Textarea
               label="Job Description"
               value={formData.job_description}
               onChange={(e) =>
                 setFormData((prev) => ({ ...prev, job_description: e.target.value }))
               }
-              placeholder="Paste the full job description here..."
+              placeholder="Paste the full job description here, or use the Fetch button above to extract it from a URL..."
               className="min-h-[200px]"
               required
             />
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Input
-                label="Company Website"
-                type="url"
-                value={formData.company_url}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, company_url: e.target.value }))
-                }
-                placeholder="https://company.com"
-                helperText="Optional - helps with company research"
-              />
+            {/* Additional Notes */}
+            <Textarea
+              label="Additional Notes (Optional)"
+              value={formData.additional_notes}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, additional_notes: e.target.value }))
+              }
+              placeholder="Add any additional context about the role - information from recruiter calls, specific team details, company culture notes, or anything not in the job posting..."
+              className="min-h-[100px]"
+              helperText="This information will be included when generating your page to make it more personalized"
+            />
 
-              <Input
-                label="Job Posting URL"
-                type="url"
-                value={formData.job_posting_url}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    job_posting_url: e.target.value,
-                  }))
-                }
-                placeholder="https://..."
-                helperText="Optional - for your reference"
-              />
-            </div>
+            <Input
+              label="Company Website (Optional)"
+              type="url"
+              value={formData.company_url}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, company_url: e.target.value }))
+              }
+              placeholder="https://company.com"
+              helperText="Helps with company research"
+            />
 
             <div className="flex justify-end gap-3">
               <Button

@@ -115,21 +115,23 @@ export default async function DashboardLayout({
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-gray-200 bg-white mt-auto">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-500">
-            <p>&copy; {new Date().getFullYear()} SignalPage. All rights reserved.</p>
-            <div className="flex items-center gap-4">
+      <footer className="border-t border-gray-100 bg-gray-50/50 mt-auto">
+        <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-400">
+            <p>&copy; {new Date().getFullYear()} SignalPage</p>
+            <div className="flex items-center gap-3">
               <a
                 href="mailto:info@signalpage.ai"
-                className="hover:text-gray-700 transition-colors"
+                className="hover:text-gray-600 transition-colors"
               >
                 Support
               </a>
-              <Link href="/privacy" className="hover:text-gray-700 transition-colors">
+              <span className="text-gray-300">·</span>
+              <Link href="/privacy" className="hover:text-gray-600 transition-colors">
                 Privacy
               </Link>
-              <Link href="/terms" className="hover:text-gray-700 transition-colors">
+              <span className="text-gray-300">·</span>
+              <Link href="/terms" className="hover:text-gray-600 transition-colors">
                 Terms
               </Link>
             </div>
