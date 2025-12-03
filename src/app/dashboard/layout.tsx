@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { createClient } from '@/lib/supabase/server';
+import { SignOutButton } from '@/components/SignOutButton';
 
 // Force dynamic rendering - don't try to prerender at build time
 export const dynamic = 'force-dynamic';
@@ -75,14 +76,7 @@ export default async function DashboardLayout({
               <span className="hidden md:inline text-sm font-medium text-gray-900">
                 {profile?.full_name || user.email}
               </span>
-              <form action="/auth/signout" method="post">
-                <button
-                  type="submit"
-                  className="rounded-md px-2 sm:px-3 py-2 text-sm font-medium text-gray-900 hover:bg-gray-100"
-                >
-                  Sign out
-                </button>
-              </form>
+              <SignOutButton className="rounded-md px-2 sm:px-3 py-2 text-sm font-medium text-gray-900 hover:bg-gray-100" />
             </div>
           </div>
           {/* Mobile nav links */}
