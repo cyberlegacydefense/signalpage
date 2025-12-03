@@ -11,6 +11,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.0",
     "@hookform/resolvers": "^5.2.2",
+    "@stripe/stripe-js": "^8.5.3",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.86.0",
     "class-variance-authority": "^0.7.1",
@@ -22,6 +23,7 @@
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-hook-form": "^7.67.0",
+    "stripe": "^20.0.0",
     "tailwind-merge": "^3.4.0",
     "unpdf": "^1.4.0",
     "uuid": "^13.0.0",

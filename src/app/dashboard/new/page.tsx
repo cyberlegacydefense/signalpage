@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import {
   Button,
@@ -15,6 +16,14 @@ import {
   CardContent,
 } from '@/components/ui';
 import type { SeniorityLevel } from '@/types';
+
+interface SubscriptionStatus {
+  tier: string;
+  isFreeUser: boolean;
+  maxPages: number;
+  currentPageCount: number;
+  canCreatePage: boolean;
+}
 
 const seniorityOptions = [
   { value: 'entry', label: 'Entry Level' },
@@ -31,6 +40,25 @@ export default function NewJobPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
+  const [checkingSubscription, setCheckingSubscription] = useState(true);
+
+  useEffect(() => {
+    async function checkSubscription() {
+      try {
+        const response = await fetch('/api/subscription/status');
+        if (response.ok) {
+          const data = await response.json();
+          setSubscription(data);
+        }
+      } catch (err) {
+        console.error('Failed to check subscription:', err);
+      } finally {
+        setCheckingSubscription(false);
+      }
+    }
+    checkSubscription();
+  }, []);
 
   const [formData, setFormData] = useState({
     company_name: '',
@@ -77,6 +105,59 @@ export default function NewJobPage() {
     }
   };
 
+  // Show loading state while checking subscription
+  if (checkingSubscription) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <Card>
+          <CardContent className="py-12 text-center">
+            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+            <p className="mt-4 text-sm text-gray-500">Checking your subscription...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show upgrade prompt if user can't create more pages
+  if (subscription && !subscription.canCreatePage) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <Card>
+          <CardHeader>
+            <CardTitle>Upgrade Required</CardTitle>
+            <CardDescription>
+              You&apos;ve reached your limit of {subscription.maxPages} Signal Page{subscription.maxPages === 1 ? '' : 's'} on the free plan.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-lg bg-blue-50 border border-blue-200 p-6 text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
+                <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <h3 className="mb-2 text-lg font-semibold text-gray-900">
+                Unlock Unlimited Signal Pages
+              </h3>
+              <p className="mb-6 text-sm text-gray-600">
+                Upgrade to Pro to create unlimited role-specific landing pages and stand out in every application.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Link href="/pricing">
+                  <Button variant="primary">View Pricing</Button>
+                </Link>
+                <Button variant="outline" onClick={() => router.push('/dashboard')}>
+                  Back to Dashboard
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-2xl">
       <Card>
@@ -86,6 +167,11 @@ export default function NewJobPage() {
             Enter the job details and we&apos;ll generate a role-specific landing
             page that showcases your fit for this opportunity.
           </CardDescription>
+          {subscription && !subscription.isFreeUser && subscription.tier === 'free' && (
+            <div className="mt-2 text-xs text-gray-500">
+              {subscription.currentPageCount} of {subscription.maxPages} pages used
+            </div>
+          )}
         </CardHeader>
 
         <CardContent>

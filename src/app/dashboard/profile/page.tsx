@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import {
   Button,
@@ -12,9 +13,18 @@ import {
   CardDescription,
   CardContent,
   Select,
+  Badge,
 } from '@/components/ui';
 import type { User, Resume, ParsedResume } from '@/types';
 import { RESUME_TAGS } from '@/types';
+
+interface SubscriptionInfo {
+  tier: string;
+  status: string;
+  isFreeUser: boolean;
+  maxPages: number;
+  currentPageCount: number;
+}
 
 const MAX_RESUMES = 5;
 
@@ -24,6 +34,7 @@ export default function ProfilePage() {
   const [isParsing, setIsParsing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoadingPortal, setIsLoadingPortal] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -34,11 +45,44 @@ export default function ProfilePage() {
   const [resumeTag, setResumeTag] = useState('');
   const [resumeText, setResumeText] = useState('');
   const [currentResume, setCurrentResume] = useState<Resume | null>(null);
+  const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadData();
+    loadSubscription();
   }, []);
+
+  async function loadSubscription() {
+    try {
+      const response = await fetch('/api/subscription/status');
+      if (response.ok) {
+        const data = await response.json();
+        setSubscription(data);
+      }
+    } catch (err) {
+      console.error('Failed to load subscription:', err);
+    }
+  }
+
+  const handleManageBilling = async () => {
+    setIsLoadingPortal(true);
+    try {
+      const response = await fetch('/api/stripe/create-portal', {
+        method: 'POST',
+      });
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setError(data.error || 'Failed to open billing portal');
+      }
+    } catch (err) {
+      setError('Failed to open billing portal');
+    } finally {
+      setIsLoadingPortal(false);
+    }
+  };
 
   async function loadData() {
     const supabase = createClient();
@@ -630,6 +674,82 @@ export default function ProfilePage() {
               </Button>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Subscription Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Subscription & Billing</CardTitle>
+          <CardDescription>
+            Manage your subscription and billing details.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent>
+          {subscription ? (
+            <div className="space-y-6">
+              {/* Current Plan */}
+              <div className="flex items-center justify-between p-4 rounded-lg bg-gray-50">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-900">
+                      {subscription.isFreeUser ? 'Free (Unlimited)' :
+                       subscription.tier === 'free' ? 'Free Plan' : 'Pro Plan'}
+                    </span>
+                    {subscription.isFreeUser && (
+                      <Badge variant="success">Special Access</Badge>
+                    )}
+                    {subscription.tier !== 'free' && !subscription.isFreeUser && (
+                      <Badge variant="success">Active</Badge>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm text-gray-500">
+                    {subscription.isFreeUser ? (
+                      'You have unlimited access to all features'
+                    ) : subscription.tier === 'free' ? (
+                      `${subscription.currentPageCount} of ${subscription.maxPages} pages used`
+                    ) : (
+                      'Unlimited Signal Pages'
+                    )}
+                  </p>
+                </div>
+                <div>
+                  {subscription.tier !== 'free' && !subscription.isFreeUser && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleManageBilling}
+                      isLoading={isLoadingPortal}
+                    >
+                      Manage Billing
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Upgrade CTA for free users */}
+              {subscription.tier === 'free' && !subscription.isFreeUser && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                  <h4 className="font-medium text-blue-900">Upgrade to Pro</h4>
+                  <p className="mt-1 text-sm text-blue-700">
+                    Get unlimited Signal Pages and stand out in every application.
+                  </p>
+                  <div className="mt-4">
+                    <Link href="/pricing">
+                      <Button variant="primary" size="sm">
+                        View Pricing
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center py-8">
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
