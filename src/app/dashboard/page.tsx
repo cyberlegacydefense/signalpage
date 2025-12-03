@@ -2,10 +2,17 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { Button, Card, CardContent, Badge } from '@/components/ui';
 import { formatDistanceToNow } from 'date-fns';
+import { SuccessBanner } from '@/components/SuccessBanner';
 
 export const dynamic = 'force-dynamic';
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ checkout?: string }>;
+}) {
+  const params = await searchParams;
+  const checkoutSuccess = params.checkout === 'success';
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -49,6 +56,13 @@ export default async function DashboardPage() {
 
   return (
     <div>
+      {checkoutSuccess && (
+        <SuccessBanner
+          title="Welcome to Pro!"
+          message="Your subscription is now active. You can create unlimited Signal Pages. A confirmation email has been sent to your inbox."
+        />
+      )}
+
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">My Signal Pages</h1>
