@@ -23,6 +23,9 @@ export default function Home() {
               <Link href="/faq" className="hidden sm:inline text-sm font-medium text-gray-900 hover:text-gray-600">
                 How It Works
               </Link>
+              <Link href="/pricing" className="hidden sm:inline text-sm font-medium text-gray-900 hover:text-gray-600">
+                Pricing
+              </Link>
               <Link href="/auth/login">
                 <Button variant="ghost" className="text-xs sm:text-sm px-2 sm:px-4">Sign in</Button>
               </Link>
@@ -31,10 +34,13 @@ export default function Home() {
               </Link>
             </div>
           </div>
-          {/* Mobile "How It Works" link */}
-          <div className="flex sm:hidden justify-center pb-3">
+          {/* Mobile links */}
+          <div className="flex sm:hidden justify-center gap-4 pb-3">
             <Link href="/faq" className="text-sm font-medium text-gray-900 hover:text-gray-600">
               How It Works
+            </Link>
+            <Link href="/pricing" className="text-sm font-medium text-gray-900 hover:text-gray-600">
+              Pricing
             </Link>
           </div>
         </div>
