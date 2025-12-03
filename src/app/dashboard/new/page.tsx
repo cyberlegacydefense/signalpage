@@ -254,21 +254,27 @@ export default function NewJobPage() {
                 }
               />
 
-              <Select
-                label="Resume"
-                value={formData.resume_id}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, resume_id: e.target.value }))
-                }
-                options={[
-                  { value: '', label: loadingResumes ? 'Loading...' : (resumes.length === 0 ? 'No resumes - add one in Profile' : 'Select a resume...') },
-                  ...resumes.map((r) => ({
-                    value: r.id,
-                    label: `${r.name || 'Untitled'}${r.tag ? ` (${RESUME_TAGS.find(t => t.value === r.tag)?.label || r.tag})` : ''}${r.is_primary ? ' - Primary' : ''}`,
-                  })),
-                ]}
-                helperText={resumes.length === 0 ? <Link href="/dashboard/profile" className="text-blue-600 hover:underline">Add a resume in your profile</Link> : undefined}
-              />
+              <div>
+                <Select
+                  label="Resume"
+                  value={formData.resume_id}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, resume_id: e.target.value }))
+                  }
+                  options={[
+                    { value: '', label: loadingResumes ? 'Loading...' : (resumes.length === 0 ? 'No resumes available' : 'Select a resume...') },
+                    ...resumes.map((r) => ({
+                      value: r.id,
+                      label: `${r.name || 'Untitled'}${r.tag ? ` (${RESUME_TAGS.find(t => t.value === r.tag)?.label || r.tag})` : ''}${r.is_primary ? ' - Primary' : ''}`,
+                    })),
+                  ]}
+                />
+                {resumes.length === 0 && !loadingResumes && (
+                  <Link href="/dashboard/profile" className="mt-1 block text-sm text-blue-600 hover:underline">
+                    Add a resume in your profile
+                  </Link>
+                )}
+              </div>
             </div>
 
             {/* Optional Personalization */}
