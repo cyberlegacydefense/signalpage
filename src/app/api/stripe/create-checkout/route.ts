@@ -19,7 +19,10 @@ export async function POST(request: Request) {
 
     const priceId = getPriceIdForTier('pro', interval);
     if (!priceId) {
-      return NextResponse.json({ error: 'Price not configured' }, { status: 500 });
+      console.error('Price ID not found for interval:', interval);
+      console.error('Monthly price ID:', process.env.STRIPE_PRO_MONTHLY_PRICE_ID);
+      console.error('Quarterly price ID:', process.env.STRIPE_PRO_QUARTERLY_PRICE_ID);
+      return NextResponse.json({ error: `Price not configured for ${interval}` }, { status: 500 });
     }
 
     // Get or create Stripe customer
@@ -75,8 +78,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ url: session.url });
   } catch (error) {
     console.error('Checkout error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { error: 'Failed to create checkout session' },
+      { error: `Failed to create checkout session: ${errorMessage}` },
       { status: 500 }
     );
   }
