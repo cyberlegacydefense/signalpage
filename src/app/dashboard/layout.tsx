@@ -115,26 +115,16 @@ export default async function DashboardLayout({
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-gray-100 bg-gray-50/50 mt-auto">
-        <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-400">
-            <p>&copy; {new Date().getFullYear()} SignalPage</p>
-            <div className="flex items-center gap-3">
-              <a
-                href="mailto:info@signalpage.ai"
-                className="hover:text-gray-600 transition-colors"
-              >
-                Support
-              </a>
-              <span className="text-gray-300">·</span>
-              <Link href="/privacy" className="hover:text-gray-600 transition-colors">
-                Privacy
-              </Link>
-              <span className="text-gray-300">·</span>
-              <Link href="/terms" className="hover:text-gray-600 transition-colors">
-                Terms
-              </Link>
-            </div>
+      <footer className="border-t border-gray-100 mt-auto">
+        <div className="mx-auto max-w-7xl px-4 py-2 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-center gap-3 text-xs text-gray-400">
+            <span>&copy; {new Date().getFullYear()} SignalPage</span>
+            <span className="text-gray-300">·</span>
+            <a href="mailto:info@signalpage.ai" className="hover:text-gray-600">Support</a>
+            <span className="text-gray-300">·</span>
+            <Link href="/privacy" className="hover:text-gray-600">Privacy</Link>
+            <span className="text-gray-300">·</span>
+            <Link href="/terms" className="hover:text-gray-600">Terms</Link>
           </div>
         </div>
       </footer>

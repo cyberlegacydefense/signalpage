@@ -213,7 +213,7 @@ export default function Home() {
                 </h3>
                 <p className="text-gray-600">
                   Include your SignalPage link in applications, emails to recruiters,
-                  or even as a QR code on your resume.
+                  or LinkedIn messages.
                 </p>
               </div>
             </div>

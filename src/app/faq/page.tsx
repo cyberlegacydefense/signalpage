@@ -21,7 +21,7 @@ const faqs = [
   {
     question: 'How do I share my Signal Page?',
     answer:
-      'Each Signal Page has a unique URL (e.g., signalpage.com/yourname/company-role). You can include this link in your cover letters, emails to recruiters, LinkedIn messages, or even as a QR code on your resume.',
+      'Each Signal Page has a unique URL (e.g., signalpage.com/yourname/company-role). You can include this link in your cover letters, emails to recruiters, or LinkedIn messages.',
   },
   {
     question: 'Can I have multiple resumes?',
