@@ -224,6 +224,8 @@ export interface GenerationContext {
   job: Job;
   user: Pick<User, 'full_name' | 'headline' | 'about_me'>;
   companyResearch?: CompanyResearch;
+  recruiterName?: string | null;
+  hiringManagerName?: string | null;
 }
 
 export interface CompanyResearch {

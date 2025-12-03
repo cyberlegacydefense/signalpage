@@ -5,6 +5,9 @@ import { generateSlug } from '@/lib/utils/slug';
 import { calculateMatchScore } from '@/lib/utils/match-score';
 import type { GenerationContext, ParsedResume, Job, User } from '@/types';
 
+// Increase timeout for Netlify (max 26 seconds for hobby, 60 for pro)
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -90,6 +93,8 @@ export async function POST(request: Request) {
         headline: profile.headline,
         about_me: profile.about_me,
       } as Pick<User, 'full_name' | 'headline' | 'about_me'>,
+      recruiterName: job.recruiter_name,
+      hiringManagerName: job.hiring_manager_name,
     };
 
     // Generate all page sections

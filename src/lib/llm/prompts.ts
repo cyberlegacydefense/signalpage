@@ -76,12 +76,18 @@ ${
 
 export function buildGenerationContext(context: GenerationContext): string {
   const firstName = context.user.full_name?.split(' ')[0] || 'the candidate';
+  const recipientName = context.recruiterName || context.hiringManagerName;
 
   return `
 ## Applicant Information
 **Name**: ${context.user.full_name || 'Not provided'}
 **First Name**: ${firstName}
 ${context.user.headline ? `**Headline**: ${context.user.headline}` : ''}
+
+## Recipient Information
+${recipientName ? `**Recipient Name**: ${recipientName}` : '**Recipient Name**: Not provided (use generic greeting)'}
+${context.recruiterName ? `**Recruiter**: ${context.recruiterName}` : ''}
+${context.hiringManagerName ? `**Hiring Manager**: ${context.hiringManagerName}` : ''}
 
 ${buildResumeContext(context.resume)}
 
@@ -258,15 +264,20 @@ Prioritize:
 
 export const GENERATE_AI_COMMENTARY_PROMPT = `Write a brief (2-3 paragraphs) AI Career Coach Insights section.
 
-IMPORTANT: Use the applicant's first name (provided in the context above) throughout. Never use "the candidate" - always refer to them by their first name.
+IMPORTANT PERSONALIZATION RULES:
+- If a Recipient Name is provided in the context, address this note directly to them using their first name (e.g., "Dear Sarah," or "Hi Michael,"). Make it feel like a personal note to that specific person.
+- If no Recipient Name is provided, write it as general insights without a direct address.
+- Always use the applicant's first name throughout. Never use "the candidate" - always refer to them by their first name.
 
 This section explains the strategic alignment between this applicant and the opportunity. Include:
 1. Why this is a strong match based on their career trajectory
 2. Specific ways their experience maps to company needs
 3. Any relevant company context (recent news, initiatives) that makes this timely
 
-Write in third person as an objective career coach providing insights to a hiring manager about why [First Name] would be an excellent fit.
-Keep it conversational but professional. Start with something like "[First Name] brings..." or "What stands out about [First Name]..."
+If addressing a specific recipient, write in second person to them about the applicant (e.g., "I wanted to share why [First Name] would be an exceptional fit for your team...").
+If no recipient, write in third person as an objective career coach providing insights about why [First Name] would be an excellent fit.
+
+Keep it conversational but professional.
 
 IMPORTANT: Return ONLY plain text paragraphs. Do NOT wrap in JSON, markdown code blocks, or any other formatting. Just write the paragraphs directly.
 `;

@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { generateAICommentary } from '@/lib/llm/generation-service';
 import type { GenerationContext, ParsedResume, Job, User } from '@/types';
 
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -63,14 +65,17 @@ export async function POST(request: Request) {
     }
 
     // Build generation context
+    const jobData = page.jobs as Job & { recruiter_name?: string; hiring_manager_name?: string };
     const context: GenerationContext = {
       resume: resume.parsed_data as ParsedResume,
-      job: page.jobs as Job,
+      job: jobData,
       user: {
         full_name: profile.full_name,
         headline: profile.headline,
         about_me: profile.about_me,
       } as Pick<User, 'full_name' | 'headline' | 'about_me'>,
+      recruiterName: jobData.recruiter_name,
+      hiringManagerName: jobData.hiring_manager_name,
     };
 
     // Generate new AI commentary
