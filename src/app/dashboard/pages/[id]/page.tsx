@@ -670,7 +670,7 @@ export default function PageEditorPage({ params }: PageProps) {
           </CardContent>
         </Card>
 
-        {/* Page Analytics */}
+        {/* Page Analytics - Hidden until unique visitors tracking is fixed
         <Card>
           <CardHeader>
             <CardTitle>Page Analytics</CardTitle>
@@ -703,6 +703,7 @@ export default function PageEditorPage({ params }: PageProps) {
             )}
           </CardContent>
         </Card>
+        */}
       </div>
 
       {/* Danger Zone */}
