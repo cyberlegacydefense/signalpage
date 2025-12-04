@@ -445,18 +445,50 @@ export default function PageEditorPage({ params }: PageProps) {
             <CardTitle>30/60/90 Day Plan</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-4">
+              {/* Day 30 */}
               <div className="rounded-lg bg-blue-50 p-4">
-                <div className="mb-2 text-sm font-medium text-blue-700">Days 1-30</div>
-                <p className="text-sm">{plan306090.day_30?.title}</p>
+                <div className="mb-2 text-sm font-semibold text-blue-700">Days 1-30: {plan306090.day_30?.title}</div>
+                {plan306090.day_30?.objectives && plan306090.day_30.objectives.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {plan306090.day_30.objectives.map((obj, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                        <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-blue-400" />
+                        {obj}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
+
+              {/* Day 60 */}
               <div className="rounded-lg bg-purple-50 p-4">
-                <div className="mb-2 text-sm font-medium text-purple-700">Days 31-60</div>
-                <p className="text-sm">{plan306090.day_60?.title}</p>
+                <div className="mb-2 text-sm font-semibold text-purple-700">Days 31-60: {plan306090.day_60?.title}</div>
+                {plan306090.day_60?.objectives && plan306090.day_60.objectives.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {plan306090.day_60.objectives.map((obj, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                        <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-purple-400" />
+                        {obj}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
+
+              {/* Day 90 */}
               <div className="rounded-lg bg-green-50 p-4">
-                <div className="mb-2 text-sm font-medium text-green-700">Days 61-90</div>
-                <p className="text-sm">{plan306090.day_90?.title}</p>
+                <div className="mb-2 text-sm font-semibold text-green-700">Days 61-90: {plan306090.day_90?.title}</div>
+                {plan306090.day_90?.objectives && plan306090.day_90.objectives.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {plan306090.day_90.objectives.map((obj, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                        <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-green-400" />
+                        {obj}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
           </CardContent>
