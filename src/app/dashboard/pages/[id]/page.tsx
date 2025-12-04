@@ -39,7 +39,12 @@ export default function PageEditorPage({ params }: PageProps) {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [isRecalculatingScore, setIsRecalculatingScore] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [analytics, setAnalytics] = useState<{ views: number; uniqueViews: number } | null>(null);
+  const [analytics, setAnalytics] = useState<{
+    views: number;
+    views24h: number;
+    views7d: number;
+    views30d: number;
+  } | null>(null);
   const [editingHighlightIndex, setEditingHighlightIndex] = useState<number | null>(null);
   const [editedHighlights, setEditedHighlights] = useState<HighlightSection[] | null>(null);
 
@@ -98,15 +103,25 @@ export default function PageEditorPage({ params }: PageProps) {
       // Load analytics
       const { data: analyticsData } = await supabase
         .from('page_analytics')
-        .select('id, ip_hash')
+        .select('id, created_at')
         .eq('page_id', pageId)
         .eq('event_type', 'page_view');
 
       if (analyticsData) {
-        const uniqueIps = new Set(analyticsData.map(a => a.ip_hash).filter(Boolean));
+        const now = new Date();
+        const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+        const views24h = analyticsData.filter(a => new Date(a.created_at) >= oneDayAgo).length;
+        const views7d = analyticsData.filter(a => new Date(a.created_at) >= oneWeekAgo).length;
+        const views30d = analyticsData.filter(a => new Date(a.created_at) >= oneMonthAgo).length;
+
         setAnalytics({
           views: analyticsData.length,
-          uniqueViews: uniqueIps.size || analyticsData.length,
+          views24h,
+          views7d,
+          views30d,
         });
       }
     }
@@ -1285,10 +1300,28 @@ export default function PageEditorPage({ params }: PageProps) {
               </p>
             ) : analytics ? (
               <div className="space-y-4">
+                {/* Total Views - Large */}
                 <div className="rounded-lg bg-gray-50 p-4 text-center">
                   <p className="text-3xl font-bold text-gray-900">{analytics.views}</p>
                   <p className="mt-1 text-sm text-gray-500">Total Views</p>
                 </div>
+
+                {/* Time-based breakdown */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-lg bg-blue-50 p-3 text-center">
+                    <p className="text-xl font-semibold text-blue-700">{analytics.views24h}</p>
+                    <p className="text-xs text-blue-600">Last 24h</p>
+                  </div>
+                  <div className="rounded-lg bg-purple-50 p-3 text-center">
+                    <p className="text-xl font-semibold text-purple-700">{analytics.views7d}</p>
+                    <p className="text-xs text-purple-600">Last 7 days</p>
+                  </div>
+                  <div className="rounded-lg bg-green-50 p-3 text-center">
+                    <p className="text-xl font-semibold text-green-700">{analytics.views30d}</p>
+                    <p className="text-xs text-green-600">Last 30 days</p>
+                  </div>
+                </div>
+
                 <p className="text-xs text-gray-400 text-center">
                   Analytics update in real-time as visitors view your page
                 </p>
