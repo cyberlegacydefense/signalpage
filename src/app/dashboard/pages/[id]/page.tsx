@@ -3,6 +3,7 @@
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { formatDistanceToNow, formatDistance } from 'date-fns';
 import { createClient } from '@/lib/supabase/client';
 import { Button, Card, CardHeader, CardTitle, CardContent, Badge } from '@/components/ui';
 import type {
@@ -41,9 +42,9 @@ export default function PageEditorPage({ params }: PageProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [analytics, setAnalytics] = useState<{
     views: number;
-    views24h: number;
-    views7d: number;
-    views30d: number;
+    firstViewAt: string | null;
+    lastViewAt: string | null;
+    publishedAt: string | null;
   } | null>(null);
   const [editingHighlightIndex, setEditingHighlightIndex] = useState<number | null>(null);
   const [editedHighlights, setEditedHighlights] = useState<HighlightSection[] | null>(null);
@@ -105,23 +106,22 @@ export default function PageEditorPage({ params }: PageProps) {
         .from('page_analytics')
         .select('id, created_at')
         .eq('page_id', pageId)
-        .eq('event_type', 'page_view');
+        .eq('event_type', 'page_view')
+        .order('created_at', { ascending: true });
 
-      if (analyticsData) {
-        const now = new Date();
-        const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-        const views24h = analyticsData.filter(a => new Date(a.created_at) >= oneDayAgo).length;
-        const views7d = analyticsData.filter(a => new Date(a.created_at) >= oneWeekAgo).length;
-        const views30d = analyticsData.filter(a => new Date(a.created_at) >= oneMonthAgo).length;
-
+      if (analyticsData && analyticsData.length > 0) {
         setAnalytics({
           views: analyticsData.length,
-          views24h,
-          views7d,
-          views30d,
+          firstViewAt: analyticsData[0].created_at,
+          lastViewAt: analyticsData[analyticsData.length - 1].created_at,
+          publishedAt: data.generated_at, // Use page generation time as proxy for publish time
+        });
+      } else {
+        setAnalytics({
+          views: 0,
+          firstViewAt: null,
+          lastViewAt: null,
+          publishedAt: data.generated_at,
         });
       }
     }
@@ -1298,7 +1298,7 @@ export default function PageEditorPage({ params }: PageProps) {
               <p className="text-sm text-gray-500">
                 Publish your page to start tracking analytics.
               </p>
-            ) : analytics ? (
+            ) : analytics && analytics.views > 0 ? (
               <div className="space-y-4">
                 {/* Total Views - Large */}
                 <div className="rounded-lg bg-gray-50 p-4 text-center">
@@ -1306,19 +1306,36 @@ export default function PageEditorPage({ params }: PageProps) {
                   <p className="mt-1 text-sm text-gray-500">Total Views</p>
                 </div>
 
-                {/* Time-based breakdown */}
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-lg bg-blue-50 p-3 text-center">
-                    <p className="text-xl font-semibold text-blue-700">{analytics.views24h}</p>
-                    <p className="text-xs text-blue-600">Last 24h</p>
+                {/* Time to First View & Last Viewed */}
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Time to First View */}
+                  <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <svg className="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      <p className="text-xs font-medium text-blue-700">First View</p>
+                    </div>
+                    <p className="text-sm font-semibold text-blue-900">
+                      {analytics.firstViewAt && analytics.publishedAt
+                        ? formatDistance(new Date(analytics.firstViewAt), new Date(analytics.publishedAt), { addSuffix: false }) + ' after publishing'
+                        : 'N/A'}
+                    </p>
                   </div>
-                  <div className="rounded-lg bg-purple-50 p-3 text-center">
-                    <p className="text-xl font-semibold text-purple-700">{analytics.views7d}</p>
-                    <p className="text-xs text-purple-600">Last 7 days</p>
-                  </div>
-                  <div className="rounded-lg bg-green-50 p-3 text-center">
-                    <p className="text-xl font-semibold text-green-700">{analytics.views30d}</p>
-                    <p className="text-xs text-green-600">Last 30 days</p>
+
+                  {/* Last Viewed */}
+                  <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p className="text-xs font-medium text-green-700">Last Viewed</p>
+                    </div>
+                    <p className="text-sm font-semibold text-green-900">
+                      {analytics.lastViewAt
+                        ? formatDistanceToNow(new Date(analytics.lastViewAt), { addSuffix: true })
+                        : 'N/A'}
+                    </p>
                   </div>
                 </div>
 
