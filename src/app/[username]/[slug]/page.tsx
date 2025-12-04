@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import {
   HeroSection,
   FitSection,
@@ -135,13 +135,23 @@ export default async function SignalPage({ params }: PageProps) {
     company_name: page.jobs.company_name || 'Company',
   };
 
-  // Record page view (fire and forget, ignore errors)
-  void supabase.from('page_analytics').insert({
-    page_id: page.id,
-    event_type: 'page_view',
-    referrer: null,
-    user_agent: null,
-  });
+  // Record page view using service client (bypasses RLS for analytics)
+  // Fire and forget - don't await to avoid blocking page render
+  try {
+    const serviceClient = createServiceClient();
+    serviceClient.from('page_analytics').insert({
+      page_id: page.id,
+      event_type: 'page_view',
+      referrer: null,
+      user_agent: null,
+    }).then(({ error }) => {
+      if (error) {
+        console.error('Failed to record page view:', error);
+      }
+    });
+  } catch (err) {
+    console.error('Failed to create service client for analytics:', err);
+  }
 
   // Cast the JSONB fields to proper types with defaults
   const hero = (page.hero || { tagline: '', value_promise: '' }) as HeroSectionType;
