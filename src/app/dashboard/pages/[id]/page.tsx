@@ -670,7 +670,7 @@ export default function PageEditorPage({ params }: PageProps) {
           </CardContent>
         </Card>
 
-        {/* Page Analytics - Hidden until unique visitors tracking is fixed
+        {/* Page Analytics */}
         <Card>
           <CardHeader>
             <CardTitle>Page Analytics</CardTitle>
@@ -681,16 +681,10 @@ export default function PageEditorPage({ params }: PageProps) {
                 Publish your page to start tracking analytics.
               </p>
             ) : analytics ? (
-              <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="rounded-lg bg-gray-50 p-4 text-center">
-                    <p className="text-3xl font-bold text-gray-900">{analytics.views}</p>
-                    <p className="mt-1 text-sm text-gray-500">Total Views</p>
-                  </div>
-                  <div className="rounded-lg bg-gray-50 p-4 text-center">
-                    <p className="text-3xl font-bold text-gray-900">{analytics.uniqueViews}</p>
-                    <p className="mt-1 text-sm text-gray-500">Unique Visitors</p>
-                  </div>
+              <div className="space-y-4">
+                <div className="rounded-lg bg-gray-50 p-4 text-center">
+                  <p className="text-3xl font-bold text-gray-900">{analytics.views}</p>
+                  <p className="mt-1 text-sm text-gray-500">Total Views</p>
                 </div>
                 <p className="text-xs text-gray-400 text-center">
                   Analytics update in real-time as visitors view your page
@@ -703,7 +697,6 @@ export default function PageEditorPage({ params }: PageProps) {
             )}
           </CardContent>
         </Card>
-        */}
       </div>
 
       {/* Danger Zone */}

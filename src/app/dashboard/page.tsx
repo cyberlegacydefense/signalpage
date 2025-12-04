@@ -39,6 +39,24 @@ export default async function DashboardPage({
     .eq('id', user!.id)
     .single();
 
+  // Get view counts for all signal pages
+  const pageIds = jobs?.flatMap(job => job.signal_pages?.map((p: { id: string }) => p.id) || []) || [];
+  const viewCounts: Record<string, number> = {};
+
+  if (pageIds.length > 0) {
+    const { data: analytics } = await supabase
+      .from('page_analytics')
+      .select('page_id')
+      .in('page_id', pageIds)
+      .eq('event_type', 'page_view');
+
+    if (analytics) {
+      analytics.forEach((a: { page_id: string }) => {
+        viewCounts[a.page_id] = (viewCounts[a.page_id] || 0) + 1;
+      });
+    }
+  }
+
   // Transform jobs data for the client component
   const jobsData = jobs?.map(job => ({
     id: job.id,
@@ -46,7 +64,10 @@ export default async function DashboardPage({
     company_name: job.company_name,
     status: job.status,
     created_at: job.created_at,
-    signal_pages: job.signal_pages || [],
+    signal_pages: (job.signal_pages || []).map((p: { id: string; slug: string; is_published: boolean; generated_at: string; match_score: number | null }) => ({
+      ...p,
+      view_count: viewCounts[p.id] || 0,
+    })),
   })) || [];
 
   return (
