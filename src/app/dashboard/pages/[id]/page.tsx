@@ -445,51 +445,55 @@ export default function PageEditorPage({ params }: PageProps) {
             <CardTitle>30/60/90 Day Plan</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {/* Day 30 */}
-              <div className="rounded-lg bg-blue-50 p-4">
-                <div className="mb-2 text-sm font-semibold text-blue-700">Days 1-30: {plan306090.day_30?.title}</div>
-                {plan306090.day_30?.objectives && plan306090.day_30.objectives.length > 0 && (
-                  <ul className="mt-2 space-y-1">
-                    {plan306090.day_30.objectives.map((obj, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                        <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-blue-400" />
-                        {obj}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              {[
+                { data: plan306090.day_30, color: 'blue', label: 'First 30 Days' },
+                { data: plan306090.day_60, color: 'purple', label: 'Days 31-60' },
+                { data: plan306090.day_90, color: 'green', label: 'Days 61-90' },
+              ].map((phase, index) => {
+                const colorMap = {
+                  blue: { bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-600', bullet: 'text-blue-600' },
+                  purple: { bg: 'bg-purple-50', border: 'border-purple-200', badge: 'bg-purple-600', bullet: 'text-purple-600' },
+                  green: { bg: 'bg-green-50', border: 'border-green-200', badge: 'bg-green-600', bullet: 'text-green-600' },
+                } as const;
+                const colorClasses = colorMap[phase.color as keyof typeof colorMap];
 
-              {/* Day 60 */}
-              <div className="rounded-lg bg-purple-50 p-4">
-                <div className="mb-2 text-sm font-semibold text-purple-700">Days 31-60: {plan306090.day_60?.title}</div>
-                {plan306090.day_60?.objectives && plan306090.day_60.objectives.length > 0 && (
-                  <ul className="mt-2 space-y-1">
-                    {plan306090.day_60.objectives.map((obj, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                        <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-purple-400" />
-                        {obj}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              {/* Day 90 */}
-              <div className="rounded-lg bg-green-50 p-4">
-                <div className="mb-2 text-sm font-semibold text-green-700">Days 61-90: {plan306090.day_90?.title}</div>
-                {plan306090.day_90?.objectives && plan306090.day_90.objectives.length > 0 && (
-                  <ul className="mt-2 space-y-1">
-                    {plan306090.day_90.objectives.map((obj, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                        <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-green-400" />
-                        {obj}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+                return (
+                  <div key={index} className={`rounded-xl border ${colorClasses.border} ${colorClasses.bg} p-4`}>
+                    <div className={`mb-3 inline-block rounded-full ${colorClasses.badge} px-2.5 py-0.5 text-xs font-medium text-white`}>
+                      {phase.label}
+                    </div>
+                    <h3 className="mb-3 text-sm font-semibold text-gray-900">{phase.data?.title}</h3>
+                    {phase.data?.objectives && phase.data.objectives.length > 0 && (
+                      <div className="mb-3">
+                        <p className="mb-1.5 text-xs font-medium text-gray-500">Objectives</p>
+                        <ul className="space-y-1.5">
+                          {phase.data.objectives.map((objective, i) => (
+                            <li key={i} className="flex items-start gap-1.5 text-xs text-gray-700">
+                              <svg className={`mt-0.5 h-3 w-3 shrink-0 ${colorClasses.bullet}`} fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                              {objective}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {phase.data?.deliverables && phase.data.deliverables.length > 0 && (
+                      <div>
+                        <p className="mb-1.5 text-xs font-medium text-gray-500">Deliverables</p>
+                        <ul className="space-y-1">
+                          {phase.data.deliverables.map((deliverable, i) => (
+                            <li key={i} className="rounded bg-white/50 px-1.5 py-0.5 text-xs text-gray-700">
+                              {deliverable}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
