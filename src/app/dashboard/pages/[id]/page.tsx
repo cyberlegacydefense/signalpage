@@ -43,6 +43,16 @@ export default function PageEditorPage({ params }: PageProps) {
   const [editingHighlightIndex, setEditingHighlightIndex] = useState<number | null>(null);
   const [editedHighlights, setEditedHighlights] = useState<HighlightSection[] | null>(null);
 
+  // Section editing states
+  const [editingSection, setEditingSection] = useState<string | null>(null);
+  const [editedHero, setEditedHero] = useState<HeroSection | null>(null);
+  const [editedFitSection, setEditedFitSection] = useState<FitSection | null>(null);
+  const [editedPlan, setEditedPlan] = useState<Plan306090 | null>(null);
+  const [editedCaseStudies, setEditedCaseStudies] = useState<CaseStudy[] | null>(null);
+  const [editingCaseStudyIndex, setEditingCaseStudyIndex] = useState<number | null>(null);
+  const [editingFitBulletIndex, setEditingFitBulletIndex] = useState<number | null>(null);
+  const [editedCommentary, setEditedCommentary] = useState<string | null>(null);
+
   useEffect(() => {
     async function loadPage() {
       const supabase = createClient();
@@ -364,6 +374,165 @@ export default function PageEditorPage({ params }: PageProps) {
     }
   };
 
+  // Generic save function for any section
+  const saveSection = async (field: string, value: unknown) => {
+    if (!page) return;
+
+    setIsSaving(true);
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      const { error } = await supabase
+        .from('signal_pages')
+        .update({ [field]: value })
+        .eq('id', pageId)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      setPage((prev) => prev ? { ...prev, [field]: value } : null);
+      setEditingSection(null);
+      setEditedHero(null);
+      setEditedFitSection(null);
+      setEditedPlan(null);
+      setEditedCaseStudies(null);
+      setEditingCaseStudyIndex(null);
+      setEditingFitBulletIndex(null);
+      setEditedCommentary(null);
+    } catch (err) {
+      console.error('Error saving section:', err);
+      alert('Failed to save changes. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Hero handlers
+  const handleEditHero = () => {
+    setEditedHero({ ...(page?.hero as HeroSection) });
+    setEditingSection('hero');
+  };
+
+  const handleSaveHero = () => {
+    if (editedHero) {
+      saveSection('hero', editedHero);
+    }
+  };
+
+  // Fit Section handlers
+  const handleEditFitBullet = (index: number) => {
+    if (!editedFitSection) {
+      setEditedFitSection({ ...(page?.fit_section as FitSection) });
+    }
+    setEditingFitBulletIndex(index);
+    setEditingSection('fit');
+  };
+
+  const handleFitBulletChange = (index: number, field: 'requirement' | 'evidence', value: string) => {
+    if (!editedFitSection) return;
+    const updated = { ...editedFitSection };
+    updated.fit_bullets = [...updated.fit_bullets];
+    updated.fit_bullets[index] = { ...updated.fit_bullets[index], [field]: value };
+    setEditedFitSection(updated);
+  };
+
+  const handleSaveFitBullet = () => {
+    if (editedFitSection) {
+      saveSection('fit_section', editedFitSection);
+    }
+  };
+
+  const handleDeleteFitBullet = async (index: number) => {
+    const confirmed = window.confirm('Are you sure you want to delete this fit bullet?');
+    if (!confirmed) return;
+
+    const currentFit = editedFitSection || (page?.fit_section as FitSection);
+    const updated = {
+      ...currentFit,
+      fit_bullets: currentFit.fit_bullets.filter((_, i) => i !== index),
+    };
+    await saveSection('fit_section', updated);
+  };
+
+  // 30/60/90 Plan handlers
+  const handleEditPlan = (phase: 'day_30' | 'day_60' | 'day_90') => {
+    if (!editedPlan) {
+      setEditedPlan({ ...(page?.plan_30_60_90 as Plan306090) });
+    }
+    setEditingSection(`plan_${phase}`);
+  };
+
+  const handlePlanChange = (phase: 'day_30' | 'day_60' | 'day_90', field: 'title' | 'objectives', value: string | string[]) => {
+    if (!editedPlan) return;
+    const updated = { ...editedPlan };
+    updated[phase] = { ...updated[phase], [field]: value };
+    setEditedPlan(updated);
+  };
+
+  const handleSavePlan = () => {
+    if (editedPlan) {
+      saveSection('plan_30_60_90', editedPlan);
+    }
+  };
+
+  // Case Studies handlers
+  const handleEditCaseStudy = (index: number) => {
+    if (!editedCaseStudies) {
+      setEditedCaseStudies([...(page?.case_studies as CaseStudy[])]);
+    }
+    setEditingCaseStudyIndex(index);
+    setEditingSection('case_studies');
+  };
+
+  const handleCaseStudyChange = (index: number, field: keyof CaseStudy, value: string) => {
+    if (!editedCaseStudies) return;
+    const updated = [...editedCaseStudies];
+    updated[index] = { ...updated[index], [field]: value };
+    setEditedCaseStudies(updated);
+  };
+
+  const handleSaveCaseStudy = () => {
+    if (editedCaseStudies) {
+      saveSection('case_studies', editedCaseStudies);
+    }
+  };
+
+  const handleDeleteCaseStudy = async (index: number) => {
+    const confirmed = window.confirm('Are you sure you want to delete this case study?');
+    if (!confirmed) return;
+
+    const current = editedCaseStudies || (page?.case_studies as CaseStudy[]);
+    const updated = current.filter((_, i) => i !== index);
+    await saveSection('case_studies', updated);
+  };
+
+  // AI Commentary handlers
+  const handleEditCommentary = () => {
+    setEditedCommentary(page?.ai_commentary || '');
+    setEditingSection('commentary');
+  };
+
+  const handleSaveCommentary = () => {
+    if (editedCommentary !== null) {
+      saveSection('ai_commentary', editedCommentary);
+    }
+  };
+
+  // Cancel any edit
+  const handleCancelSectionEdit = () => {
+    setEditingSection(null);
+    setEditedHero(null);
+    setEditedFitSection(null);
+    setEditedPlan(null);
+    setEditedCaseStudies(null);
+    setEditingCaseStudyIndex(null);
+    setEditingFitBulletIndex(null);
+    setEditedCommentary(null);
+  };
+
   if (isLoading || !page) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -479,29 +648,126 @@ export default function PageEditorPage({ params }: PageProps) {
         {/* Hero */}
         <Card>
           <CardHeader>
-            <CardTitle>Hero Section</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Hero Section</CardTitle>
+              {editingSection !== 'hero' && (
+                <button onClick={handleEditHero} className="text-xs text-blue-600 hover:text-blue-700">
+                  Edit
+                </button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="rounded-lg bg-gray-900 p-6 text-white">
-              <h2 className="mb-2 text-2xl font-bold">{hero.tagline}</h2>
-              <p className="text-gray-300">{hero.value_promise}</p>
-            </div>
+            {editingSection === 'hero' && editedHero ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Tagline</label>
+                  <input
+                    type="text"
+                    value={editedHero.tagline}
+                    onChange={(e) => setEditedHero({ ...editedHero, tagline: e.target.value })}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Value Promise</label>
+                  <textarea
+                    value={editedHero.value_promise}
+                    onChange={(e) => setEditedHero({ ...editedHero, value_promise: e.target.value })}
+                    rows={3}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" size="sm" onClick={handleCancelSectionEdit} disabled={isSaving}>
+                    Cancel
+                  </Button>
+                  <Button variant="primary" size="sm" onClick={handleSaveHero} isLoading={isSaving}>
+                    Save
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={handleEditHero}
+                className="cursor-pointer rounded-lg bg-gray-900 p-6 text-white transition-opacity hover:opacity-90"
+              >
+                <h2 className="mb-2 text-2xl font-bold">{hero.tagline}</h2>
+                <p className="text-gray-300">{hero.value_promise}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Fit Section */}
         <Card>
           <CardHeader>
-            <CardTitle>Why I&apos;m a Fit ({fitSection.fit_bullets?.length || 0} points)</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Why I&apos;m a Fit ({fitSection.fit_bullets?.length || 0} points)</CardTitle>
+              <p className="text-xs text-gray-500">Click to edit</p>
+            </div>
           </CardHeader>
           <CardContent>
             <ul className="space-y-3">
-              {fitSection.fit_bullets?.map((bullet, i) => (
-                <li key={i} className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-sm text-gray-500">{bullet.requirement}</p>
-                  <p className="mt-1 text-gray-900">{bullet.evidence}</p>
-                </li>
-              ))}
+              {fitSection.fit_bullets?.map((bullet, i) => {
+                const isEditing = editingSection === 'fit' && editingFitBulletIndex === i;
+                const currentBullet = editedFitSection?.fit_bullets?.[i] || bullet;
+
+                if (isEditing) {
+                  return (
+                    <li key={i} className="rounded-lg border-2 border-blue-300 bg-blue-50 p-3">
+                      <div className="space-y-3">
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-700">Requirement</label>
+                          <input
+                            type="text"
+                            value={currentBullet.requirement}
+                            onChange={(e) => handleFitBulletChange(i, 'requirement', e.target.value)}
+                            className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-700">Evidence</label>
+                          <textarea
+                            value={currentBullet.evidence}
+                            onChange={(e) => handleFitBulletChange(i, 'evidence', e.target.value)}
+                            rows={2}
+                            className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between pt-2">
+                          <button
+                            onClick={() => handleDeleteFitBullet(i)}
+                            className="text-sm text-red-600 hover:text-red-700"
+                            disabled={isSaving}
+                          >
+                            Delete
+                          </button>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={handleCancelSectionEdit} disabled={isSaving}>
+                              Cancel
+                            </Button>
+                            <Button variant="primary" size="sm" onClick={handleSaveFitBullet} isLoading={isSaving}>
+                              Save
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                }
+
+                return (
+                  <li
+                    key={i}
+                    onClick={() => handleEditFitBullet(i)}
+                    className="cursor-pointer rounded-lg bg-gray-50 p-3 transition-colors hover:bg-blue-50 hover:ring-1 hover:ring-blue-200"
+                  >
+                    <p className="text-sm text-gray-500">{bullet.requirement}</p>
+                    <p className="mt-1 text-gray-900">{bullet.evidence}</p>
+                  </li>
+                );
+              })}
             </ul>
           </CardContent>
         </Card>
@@ -600,24 +866,71 @@ export default function PageEditorPage({ params }: PageProps) {
         {/* 30/60/90 */}
         <Card>
           <CardHeader>
-            <CardTitle>30/60/90 Day Plan</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>30/60/90 Day Plan</CardTitle>
+              <p className="text-xs text-gray-500">Click a phase to edit</p>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-3">
               {[
-                { data: plan306090.day_30, color: 'blue', label: 'First 30 Days' },
-                { data: plan306090.day_60, color: 'purple', label: 'Days 31-60' },
-                { data: plan306090.day_90, color: 'green', label: 'Days 61-90' },
-              ].map((phase, index) => {
+                { data: plan306090.day_30, color: 'blue', label: 'First 30 Days', key: 'day_30' as const },
+                { data: plan306090.day_60, color: 'purple', label: 'Days 31-60', key: 'day_60' as const },
+                { data: plan306090.day_90, color: 'green', label: 'Days 61-90', key: 'day_90' as const },
+              ].map((phase) => {
                 const colorMap = {
                   blue: { bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-600', bullet: 'text-blue-600' },
                   purple: { bg: 'bg-purple-50', border: 'border-purple-200', badge: 'bg-purple-600', bullet: 'text-purple-600' },
                   green: { bg: 'bg-green-50', border: 'border-green-200', badge: 'bg-green-600', bullet: 'text-green-600' },
                 } as const;
                 const colorClasses = colorMap[phase.color as keyof typeof colorMap];
+                const isEditing = editingSection === `plan_${phase.key}`;
+                const currentPhase = editedPlan?.[phase.key] || phase.data;
+
+                if (isEditing && currentPhase) {
+                  return (
+                    <div key={phase.key} className={`rounded-xl border-2 border-blue-400 ${colorClasses.bg} p-4`}>
+                      <div className={`mb-3 inline-block rounded-full ${colorClasses.badge} px-2.5 py-0.5 text-xs font-medium text-white`}>
+                        {phase.label}
+                      </div>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-700">Title</label>
+                          <input
+                            type="text"
+                            value={currentPhase.title}
+                            onChange={(e) => handlePlanChange(phase.key, 'title', e.target.value)}
+                            className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-700">Objectives (one per line)</label>
+                          <textarea
+                            value={currentPhase.objectives?.join('\n') || ''}
+                            onChange={(e) => handlePlanChange(phase.key, 'objectives', e.target.value.split('\n').filter(o => o.trim()))}
+                            rows={4}
+                            className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={handleCancelSectionEdit} disabled={isSaving} className="flex-1 text-xs">
+                            Cancel
+                          </Button>
+                          <Button variant="primary" size="sm" onClick={handleSavePlan} isLoading={isSaving} className="flex-1 text-xs">
+                            Save
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
 
                 return (
-                  <div key={index} className={`rounded-xl border ${colorClasses.border} ${colorClasses.bg} p-4`}>
+                  <div
+                    key={phase.key}
+                    onClick={() => handleEditPlan(phase.key)}
+                    className={`cursor-pointer rounded-xl border ${colorClasses.border} ${colorClasses.bg} p-4 transition-all hover:ring-2 hover:ring-blue-300`}
+                  >
                     <div className={`mb-3 inline-block rounded-full ${colorClasses.badge} px-2.5 py-0.5 text-xs font-medium text-white`}>
                       {phase.label}
                     </div>
@@ -659,17 +972,82 @@ export default function PageEditorPage({ params }: PageProps) {
         {/* Case Studies */}
         <Card>
           <CardHeader>
-            <CardTitle>Case Studies ({caseStudies?.length || 0})</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Case Studies ({caseStudies?.length || 0})</CardTitle>
+              <p className="text-xs text-gray-500">Click to edit</p>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 sm:grid-cols-2">
-              {caseStudies?.map((study, i) => (
-                <div key={i} className="rounded-lg border border-gray-200 p-4">
-                  <div className="mb-1 text-sm text-blue-600">{study.relevance}</div>
-                  <div className="font-medium">{study.title}</div>
-                  <p className="mt-1 text-sm text-gray-600">{study.description}</p>
-                </div>
-              ))}
+              {caseStudies?.map((study, i) => {
+                const isEditing = editingSection === 'case_studies' && editingCaseStudyIndex === i;
+                const currentStudy = editedCaseStudies?.[i] || study;
+
+                if (isEditing) {
+                  return (
+                    <div key={i} className="rounded-lg border-2 border-blue-300 bg-blue-50 p-4">
+                      <div className="space-y-3">
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-700">Relevance</label>
+                          <input
+                            type="text"
+                            value={currentStudy.relevance}
+                            onChange={(e) => handleCaseStudyChange(i, 'relevance', e.target.value)}
+                            className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-700">Title</label>
+                          <input
+                            type="text"
+                            value={currentStudy.title}
+                            onChange={(e) => handleCaseStudyChange(i, 'title', e.target.value)}
+                            className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-700">Description</label>
+                          <textarea
+                            value={currentStudy.description}
+                            onChange={(e) => handleCaseStudyChange(i, 'description', e.target.value)}
+                            rows={3}
+                            className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between pt-2">
+                          <button
+                            onClick={() => handleDeleteCaseStudy(i)}
+                            className="text-sm text-red-600 hover:text-red-700"
+                            disabled={isSaving}
+                          >
+                            Delete
+                          </button>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={handleCancelSectionEdit} disabled={isSaving}>
+                              Cancel
+                            </Button>
+                            <Button variant="primary" size="sm" onClick={handleSaveCaseStudy} isLoading={isSaving}>
+                              Save
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={i}
+                    onClick={() => handleEditCaseStudy(i)}
+                    className="cursor-pointer rounded-lg border border-gray-200 p-4 transition-colors hover:border-blue-300 hover:bg-blue-50"
+                  >
+                    <div className="mb-1 text-sm text-blue-600">{study.relevance}</div>
+                    <div className="font-medium">{study.title}</div>
+                    <p className="mt-1 text-sm text-gray-600">{study.description}</p>
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -680,66 +1058,97 @@ export default function PageEditorPage({ params }: PageProps) {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>AI Career Coach Insights</CardTitle>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <span className="text-sm text-gray-600">
-                    {showAICommentary ? 'Visible' : 'Hidden'}
-                  </span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={showAICommentary}
-                    onClick={handleToggleAICommentary}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      showAICommentary ? 'bg-blue-600' : 'bg-gray-300'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        showAICommentary ? 'translate-x-6' : 'translate-x-1'
+                <div className="flex items-center gap-4">
+                  {editingSection !== 'commentary' && (
+                    <button onClick={handleEditCommentary} className="text-xs text-blue-600 hover:text-blue-700">
+                      Edit
+                    </button>
+                  )}
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <span className="text-sm text-gray-600">
+                      {showAICommentary ? 'Visible' : 'Hidden'}
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={showAICommentary}
+                      onClick={handleToggleAICommentary}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        showAICommentary ? 'bg-blue-600' : 'bg-gray-300'
                       }`}
-                    />
-                  </button>
-                </label>
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          showAICommentary ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </label>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
-              <div className={`rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 p-4 ${!showAICommentary ? 'opacity-50' : ''}`}>
-                <p className="whitespace-pre-wrap text-gray-700">{page.ai_commentary}</p>
-              </div>
-              <div className="mt-3 flex items-center justify-between">
-                {!showAICommentary ? (
-                  <p className="text-sm text-gray-500">
-                    This section will not be visible on your published page.
-                  </p>
-                ) : (
-                  <p className="text-sm text-gray-500">
-                    Uses your first name for a personalized touch.
-                  </p>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRegenerateCommentary}
-                  disabled={isRegenerating}
-                >
-                  {isRegenerating ? (
-                    <>
-                      <svg className="mr-1.5 h-4 w-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
-                      Regenerating...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      Regenerate
-                    </>
-                  )}
-                </Button>
-              </div>
+              {editingSection === 'commentary' ? (
+                <div className="space-y-4">
+                  <textarea
+                    value={editedCommentary || ''}
+                    onChange={(e) => setEditedCommentary(e.target.value)}
+                    rows={8}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" size="sm" onClick={handleCancelSectionEdit} disabled={isSaving}>
+                      Cancel
+                    </Button>
+                    <Button variant="primary" size="sm" onClick={handleSaveCommentary} isLoading={isSaving}>
+                      Save
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div
+                    onClick={handleEditCommentary}
+                    className={`cursor-pointer rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 p-4 transition-opacity hover:opacity-80 ${!showAICommentary ? 'opacity-50' : ''}`}
+                  >
+                    <p className="whitespace-pre-wrap text-gray-700">{page.ai_commentary}</p>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between">
+                    {!showAICommentary ? (
+                      <p className="text-sm text-gray-500">
+                        This section will not be visible on your published page.
+                      </p>
+                    ) : (
+                      <p className="text-sm text-gray-500">
+                        Uses your first name for a personalized touch.
+                      </p>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRegenerateCommentary}
+                      disabled={isRegenerating}
+                    >
+                      {isRegenerating ? (
+                        <>
+                          <svg className="mr-1.5 h-4 w-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          Regenerating...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          Regenerate
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         )}
