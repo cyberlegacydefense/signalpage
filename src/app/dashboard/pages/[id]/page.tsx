@@ -40,6 +40,8 @@ export default function PageEditorPage({ params }: PageProps) {
   const [isRecalculatingScore, setIsRecalculatingScore] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [analytics, setAnalytics] = useState<{ views: number; uniqueViews: number } | null>(null);
+  const [editingHighlightIndex, setEditingHighlightIndex] = useState<number | null>(null);
+  const [editedHighlights, setEditedHighlights] = useState<HighlightSection[] | null>(null);
 
   useEffect(() => {
     async function loadPage() {
@@ -280,6 +282,88 @@ export default function PageEditorPage({ params }: PageProps) {
     }
   };
 
+  const handleEditHighlight = (index: number) => {
+    if (!editedHighlights) {
+      setEditedHighlights([...(page?.highlights as HighlightSection[] || [])]);
+    }
+    setEditingHighlightIndex(index);
+  };
+
+  const handleHighlightChange = (index: number, field: keyof HighlightSection, value: string) => {
+    if (!editedHighlights) return;
+    const updated = [...editedHighlights];
+    updated[index] = { ...updated[index], [field]: value };
+    setEditedHighlights(updated);
+  };
+
+  const handleSaveHighlight = async (index: number) => {
+    if (!page || !editedHighlights) return;
+
+    setIsSaving(true);
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      const { error } = await supabase
+        .from('signal_pages')
+        .update({ highlights: editedHighlights })
+        .eq('id', pageId)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      setPage((prev) => prev ? { ...prev, highlights: editedHighlights } : null);
+      setEditingHighlightIndex(null);
+    } catch (err) {
+      console.error('Error saving highlight:', err);
+      alert('Failed to save changes. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingHighlightIndex(null);
+    setEditedHighlights(null);
+  };
+
+  const handleDeleteHighlight = async (index: number) => {
+    if (!page) return;
+
+    const confirmed = window.confirm('Are you sure you want to delete this highlight?');
+    if (!confirmed) return;
+
+    const currentHighlights = editedHighlights || (page.highlights as HighlightSection[]);
+    const updatedHighlights = currentHighlights.filter((_, i) => i !== index);
+
+    setIsSaving(true);
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      const { error } = await supabase
+        .from('signal_pages')
+        .update({ highlights: updatedHighlights })
+        .eq('id', pageId)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      setPage((prev) => prev ? { ...prev, highlights: updatedHighlights } : null);
+      setEditedHighlights(null);
+      setEditingHighlightIndex(null);
+    } catch (err) {
+      console.error('Error deleting highlight:', err);
+      alert('Failed to delete highlight. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (isLoading || !page) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -425,16 +509,90 @@ export default function PageEditorPage({ params }: PageProps) {
         {/* Highlights */}
         <Card>
           <CardHeader>
-            <CardTitle>Career Highlights ({highlights?.length || 0})</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Career Highlights ({highlights?.length || 0})</CardTitle>
+              <p className="text-xs text-gray-500">Click a highlight to edit</p>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {highlights?.map((highlight, i) => (
-                <div key={i} className="rounded-lg border border-gray-200 p-4">
-                  <div className="mb-2 font-medium">{highlight.role} at {highlight.company}</div>
-                  <p className="text-sm text-gray-600">{highlight.impact}</p>
-                </div>
-              ))}
+              {highlights?.map((highlight, i) => {
+                const isEditing = editingHighlightIndex === i;
+                const currentHighlight = editedHighlights?.[i] || highlight;
+
+                if (isEditing) {
+                  return (
+                    <div key={i} className="rounded-lg border-2 border-blue-300 bg-blue-50 p-4">
+                      <div className="space-y-3">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-gray-700">Role</label>
+                            <input
+                              type="text"
+                              value={currentHighlight.role}
+                              onChange={(e) => handleHighlightChange(i, 'role', e.target.value)}
+                              className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-gray-700">Company</label>
+                            <input
+                              type="text"
+                              value={currentHighlight.company}
+                              onChange={(e) => handleHighlightChange(i, 'company', e.target.value)}
+                              className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-700">Impact</label>
+                          <textarea
+                            value={currentHighlight.impact}
+                            onChange={(e) => handleHighlightChange(i, 'impact', e.target.value)}
+                            rows={2}
+                            className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between pt-2">
+                          <button
+                            onClick={() => handleDeleteHighlight(i)}
+                            className="text-sm text-red-600 hover:text-red-700"
+                            disabled={isSaving}
+                          >
+                            Delete
+                          </button>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={handleCancelEdit} disabled={isSaving}>
+                              Cancel
+                            </Button>
+                            <Button variant="primary" size="sm" onClick={() => handleSaveHighlight(i)} isLoading={isSaving}>
+                              Save
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={i}
+                    onClick={() => handleEditHighlight(i)}
+                    className="cursor-pointer rounded-lg border border-gray-200 p-4 transition-colors hover:border-blue-300 hover:bg-blue-50"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="mb-2 font-medium">{highlight.role} at {highlight.company}</div>
+                        <p className="text-sm text-gray-600">{highlight.impact}</p>
+                      </div>
+                      <svg className="ml-2 h-4 w-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>

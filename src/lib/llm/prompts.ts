@@ -13,11 +13,16 @@ Always output valid JSON when asked for structured data.`;
 export function buildResumeContext(resume: ParsedResume): string {
   const experiences = resume.experiences
     .map(
-      (exp) =>
-        `**${exp.title} at ${exp.company}** (${exp.start_date} - ${exp.end_date || 'Present'})
-${exp.description}
-Achievements: ${exp.achievements.join('; ')}
-${exp.technologies ? `Technologies: ${exp.technologies.join(', ')}` : ''}`
+      (exp, index) =>
+        `[ROLE ${index + 1}]
+Company: ${exp.company}
+Title: ${exp.title}
+Dates: ${exp.start_date} - ${exp.end_date || 'Present'}
+Description: ${exp.description}
+ACHIEVEMENTS FOR THIS ROLE ONLY:
+${exp.achievements.map((a, i) => `  ${i + 1}. ${a}`).join('\n')}
+${exp.technologies ? `Technologies: ${exp.technologies.join(', ')}` : ''}
+[END ROLE ${index + 1}]`
     )
     .join('\n\n');
 
@@ -39,6 +44,8 @@ Highlights: ${proj.highlights.join('; ')}`
 ${resume.summary || 'Not provided'}
 
 ### Work Experience
+IMPORTANT: Each role's achievements are STRICTLY tied to that role. Never attribute an achievement from one role to a different role.
+
 ${experiences}
 
 ### Skills
@@ -191,20 +198,28 @@ Generate 4-6 fit bullets. Each should:
 - Quote or paraphrase a real requirement from the JD
 - Provide specific evidence with company names, metrics, and outcomes
 - Be compelling but truthful based on the resume provided
+
+CRITICAL: When citing achievements with metrics, ALWAYS attribute them to the correct company. Each achievement in the resume is listed under a specific role - never attribute an achievement from Company A to Company B.
 `;
 
 export const GENERATE_HIGHLIGHTS_PROMPT = `Select and format the 2-4 most relevant career highlights for this role.
 
+CRITICAL RULE - ACHIEVEMENT ATTRIBUTION:
+- Each achievement/metric MUST only be attributed to the EXACT role where it occurred
+- The resume data shows achievements listed under each specific role - NEVER move an achievement from one role to another
+- If an achievement says "eliminated 25,000+ hours" under AutoZone, it MUST appear under AutoZone, NOT under any other company
+- Double-check each metric against the source role before including it
+
 Return a JSON array:
 [
   {
-    "company": "Company name",
-    "role": "Job title",
+    "company": "Company name (MUST match exactly where the achievement occurred)",
+    "role": "Job title at that company",
     "domain": "Industry/domain if relevant",
     "problem": "The business problem or challenge faced",
     "solution": "What the candidate did (briefly)",
-    "impact": "Quantified outcomes and results",
-    "metrics": ["Specific metrics if available"],
+    "impact": "Quantified outcomes and results (ONLY from this specific role)",
+    "metrics": ["Specific metrics from THIS role only"],
     "relevance_note": "1 sentence explaining why this is relevant to the target role"
   }
 ]
@@ -213,6 +228,7 @@ Focus on highlights that:
 1. Demonstrate skills mentioned in the JD
 2. Show similar business problems to what this company faces
 3. Have clear, quantified impact
+4. ARE CORRECTLY ATTRIBUTED - verify each metric belongs to the stated company/role
 `;
 
 export const GENERATE_30_60_90_PROMPT = `Generate a thoughtful 30/60/90 day plan for this role.
