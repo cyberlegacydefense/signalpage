@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui';
+import { FeatureShowcase } from '@/components/FeatureShowcase';
 
 export default function Home() {
   return (
@@ -150,76 +151,8 @@ export default function Home() {
         </div>
       </section>
 
-      {/* How It Works */}
-      <section id="how-it-works" className="px-4 py-20">
-        <div className="mx-auto max-w-4xl">
-          <h2 className="mb-12 text-center text-3xl font-bold text-gray-900 sm:text-4xl">
-            How It Works
-          </h2>
-
-          <div className="space-y-12">
-            <div className="flex gap-6">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xl font-bold text-white">
-                1
-              </div>
-              <div>
-                <h3 className="mb-2 text-xl font-semibold text-gray-900">
-                  Upload your resume once
-                </h3>
-                <p className="text-gray-600">
-                  Our AI parses your experience, skills, and achievements to understand
-                  your professional background.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-6">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xl font-bold text-white">
-                2
-              </div>
-              <div>
-                <h3 className="mb-2 text-xl font-semibold text-gray-900">
-                  Paste a job description
-                </h3>
-                <p className="text-gray-600">
-                  For each role you&apos;re interested in, just paste the job description
-                  and company URL.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-6">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xl font-bold text-white">
-                3
-              </div>
-              <div>
-                <h3 className="mb-2 text-xl font-semibold text-gray-900">
-                  AI generates your Signal Page
-                </h3>
-                <p className="text-gray-600">
-                  In seconds, we create a role-specific landing page with requirement
-                  mapping, a 30/60/90 plan, and relevant highlights.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-6">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xl font-bold text-white">
-                4
-              </div>
-              <div>
-                <h3 className="mb-2 text-xl font-semibold text-gray-900">
-                  Share your unique URL
-                </h3>
-                <p className="text-gray-600">
-                  Include your SignalPage link in applications, emails to recruiters,
-                  or LinkedIn messages.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* How It Works - Interactive Feature Showcase */}
+      <FeatureShowcase />
 
       {/* What's Included */}
       <section className="bg-gray-900 px-4 py-20 text-white">
