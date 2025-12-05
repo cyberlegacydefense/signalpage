@@ -262,3 +262,74 @@ export interface ProfileInput {
   portfolio_url?: string;
   github_url?: string;
 }
+
+// Interview Coach types
+export interface InterviewPrep {
+  id: string;
+  job_id: string;
+  user_id: string;
+
+  // Role context analysis
+  role_context: RoleContextPackage;
+
+  // Generated questions
+  questions: InterviewQuestions;
+
+  // Personalized answers
+  answers: InterviewAnswer[];
+
+  // Metadata
+  generated_at: string;
+  updated_at: string;
+}
+
+export interface RoleContextPackage {
+  role_summary: string;
+  company_focus: string[];
+  priority_skills: string[];
+  candidate_strengths: string[];
+  candidate_gaps: string[];
+  interviewer_mindset: string;
+}
+
+export interface InterviewQuestions {
+  behavioral: InterviewQuestion[];
+  technical: InterviewQuestion[];
+  culture_fit: InterviewQuestion[];
+  gap_probing: InterviewQuestion[];
+  role_specific: InterviewQuestion[];
+}
+
+export interface InterviewQuestion {
+  id: string;
+  question: string;
+  category: QuestionCategory;
+  difficulty: 'easy' | 'medium' | 'hard';
+  why_asked: string;
+  what_theyre_looking_for: string;
+}
+
+export type QuestionCategory = 'behavioral' | 'technical' | 'culture_fit' | 'gap_probing' | 'role_specific';
+
+export interface InterviewAnswer {
+  question_id: string;
+  question: string;
+  suggested_answer: string;
+  key_points: string[];
+  metrics_to_mention: string[];
+  follow_up_prep: string;
+}
+
+export interface AnswerFeedback {
+  scores: {
+    clarity: number;
+    relevance: number;
+    impact: number;
+    strategy: number;
+    storytelling: number;
+  };
+  overall_score: number;
+  critique: string;
+  improved_answer: string;
+  follow_up_question: string;
+}

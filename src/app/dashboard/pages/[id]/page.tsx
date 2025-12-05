@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { formatDistanceToNow, formatDistance } from 'date-fns';
 import { createClient } from '@/lib/supabase/client';
 import { Button, Card, CardHeader, CardTitle, CardContent, Badge } from '@/components/ui';
+import { InterviewPrep } from '@/components/InterviewPrep';
+import { hasCoachAccess } from '@/lib/stripe';
 import type {
   SignalPage,
   HeroSection,
@@ -58,6 +60,9 @@ export default function PageEditorPage({ params }: PageProps) {
   const [editingCaseStudyIndex, setEditingCaseStudyIndex] = useState<number | null>(null);
   const [editingFitBulletIndex, setEditingFitBulletIndex] = useState<number | null>(null);
   const [editedCommentary, setEditedCommentary] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'content' | 'interview'>('content');
+  const [subscriptionTier, setSubscriptionTier] = useState<string>('free');
+  const [jobId, setJobId] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadPage() {
@@ -71,12 +76,13 @@ export default function PageEditorPage({ params }: PageProps) {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('username')
+        .select('username, subscription_tier')
         .eq('id', user.id)
         .single();
 
       if (profile) {
         setUsername(profile.username);
+        setSubscriptionTier(profile.subscription_tier || 'free');
       }
 
       const { data, error } = await supabase
@@ -99,6 +105,7 @@ export default function PageEditorPage({ params }: PageProps) {
 
       setPage(data as PageData);
       setShowAICommentary(data.show_ai_commentary !== false);
+      setJobId(data.job_id);
       setIsLoading(false);
 
       // Load analytics
@@ -658,7 +665,51 @@ export default function PageEditorPage({ params }: PageProps) {
         </CardContent>
       </Card>
 
-      {/* Preview Sections */}
+      {/* Tabs */}
+      <div className="mb-6 border-b border-gray-200">
+        <nav className="flex gap-6">
+          <button
+            onClick={() => setActiveTab('content')}
+            className={`pb-3 text-sm font-medium transition-colors ${
+              activeTab === 'content'
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Page Content
+          </button>
+          <button
+            onClick={() => setActiveTab('interview')}
+            className={`flex items-center gap-2 pb-3 text-sm font-medium transition-colors ${
+              activeTab === 'interview'
+                ? 'border-b-2 border-purple-600 text-purple-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            Interview Prep
+            {!hasCoachAccess(subscriptionTier as 'free' | 'pro' | 'coach') && (
+              <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
+                Pro
+              </span>
+            )}
+          </button>
+        </nav>
+      </div>
+
+      {/* Interview Prep Tab */}
+      {activeTab === 'interview' && jobId && (
+        <InterviewPrep
+          jobId={jobId}
+          hasAccess={hasCoachAccess(subscriptionTier as 'free' | 'pro' | 'coach')}
+        />
+      )}
+
+      {/* Page Content Tab */}
+      {activeTab === 'content' && (
+      <>
       <div className="space-y-6">
         {/* Hero */}
         <Card>
@@ -1351,6 +1402,8 @@ export default function PageEditorPage({ params }: PageProps) {
           </CardContent>
         </Card>
       </div>
+      </>
+      )}
 
       {/* Danger Zone */}
       <div className="mt-8">

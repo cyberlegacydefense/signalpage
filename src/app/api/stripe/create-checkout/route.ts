@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { stripe, getPriceIdForTier, type BillingInterval } from '@/lib/stripe';
+import { stripe, getPriceIdForTier, type PaidTier, type BillingPeriod } from '@/lib/stripe';
 
 export async function POST(request: Request) {
   try {
@@ -11,18 +11,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { interval } = await request.json() as { interval: BillingInterval };
+    const { tier = 'pro', interval } = await request.json() as { tier?: PaidTier; interval: BillingPeriod };
 
     if (!interval || !['monthly', 'quarterly'].includes(interval)) {
       return NextResponse.json({ error: 'Invalid billing interval' }, { status: 400 });
     }
 
-    const priceId = getPriceIdForTier('pro', interval);
+    if (!['pro', 'coach'].includes(tier)) {
+      return NextResponse.json({ error: 'Invalid tier' }, { status: 400 });
+    }
+
+    const priceId = getPriceIdForTier(tier, interval);
     if (!priceId) {
-      console.error('Price ID not found for interval:', interval);
-      console.error('Monthly price ID:', process.env.STRIPE_PRO_MONTHLY_PRICE_ID);
-      console.error('Quarterly price ID:', process.env.STRIPE_PRO_QUARTERLY_PRICE_ID);
-      return NextResponse.json({ error: `Price not configured for ${interval}` }, { status: 500 });
+      console.error('Price ID not found for tier/interval:', tier, interval);
+      return NextResponse.json({ error: `Price not configured for ${tier} ${interval}` }, { status: 500 });
     }
 
     // Get or create Stripe customer
@@ -70,7 +72,7 @@ export async function POST(request: Request) {
       cancel_url: `${appUrl}/pricing?checkout=canceled`,
       metadata: {
         supabase_user_id: user.id,
-        tier: 'pro',
+        tier,
         interval,
       },
     });

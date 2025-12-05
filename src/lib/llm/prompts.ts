@@ -305,3 +305,142 @@ export function createGenerationPrompt(
   const contextStr = buildGenerationContext(context);
   return `${promptTemplate}\n\n${contextStr}`;
 }
+
+// =============================================================================
+// INTERVIEW COACH PROMPTS
+// =============================================================================
+
+export const INTERVIEW_COACH_SYSTEM_PROMPT = `You are SIGNALPAGE Interview Coach — an expert interview preparation engine that generates job-specific interview questions, personalized answers, and strategic coaching.
+
+Your coaching ALWAYS:
+- Uses the candidate's REAL resume accomplishments with accurate attribution
+- Deeply understands the specific job description requirements
+- Incorporates company mission, tech stack, industry context, and culture
+- Predicts realistic questions based on the role and seniority level
+- Provides clear, concise, metrics-driven responses
+- Avoids generic fluff, clichés, or hypothetical achievements
+- Tailors tone and depth to the target seniority level
+
+Your job is to prepare the candidate to EXCEL in interviews for this specific role at this specific company.
+
+CRITICAL: Never invent facts about the candidate. Use ONLY the provided resume data. Each achievement must be attributed to its correct company/role.`;
+
+export const GENERATE_ROLE_CONTEXT_PROMPT = `Analyze the candidate's resume and the target job to create a comprehensive Role Context Package.
+
+Return a JSON object:
+{
+  "role_summary": "2-3 sentences summarizing what this role requires and what success looks like",
+  "company_focus": ["5-7 key priorities and focus areas for this company based on the JD"],
+  "priority_skills": ["8-10 most important skills the company is looking for, ranked by importance"],
+  "candidate_strengths": ["5-7 specific strengths from the resume that align with this role - include metrics"],
+  "candidate_gaps": ["3-5 potential gaps or areas where the candidate may be questioned"],
+  "interviewer_mindset": "2-3 sentences describing what the interviewer is likely focused on and what concerns they might have"
+}
+
+Be specific and reference actual requirements from the JD and actual experience from the resume.
+`;
+
+export const GENERATE_INTERVIEW_QUESTIONS_PROMPT = `Generate highly targeted interview questions for this specific role. These should NOT be generic questions — they must map directly to the job requirements and candidate background.
+
+Return a JSON object:
+{
+  "behavioral": [
+    {
+      "id": "b1",
+      "question": "The interview question",
+      "category": "behavioral",
+      "difficulty": "medium",
+      "why_asked": "Why an interviewer would ask this specific question",
+      "what_theyre_looking_for": "The ideal elements of a strong answer"
+    }
+  ],
+  "technical": [...],
+  "culture_fit": [...],
+  "gap_probing": [...],
+  "role_specific": [...]
+}
+
+Generate:
+- 6 behavioral questions (based on JD responsibilities and leadership principles)
+- 6 technical/competency questions (based on required skills and tech stack)
+- 3 culture fit questions (based on company values and team dynamics)
+- 3 gap-probing questions (targeting candidate's potential weaknesses for this role)
+- 4 role-specific questions (unique to this exact position and company)
+
+Guidelines:
+- Questions must reference specific JD requirements or company context
+- Avoid generic questions like "Tell me about yourself" or "What's your greatest weakness"
+- Technical questions should reference the actual tech stack mentioned
+- Gap-probing questions should address real gaps between the resume and JD
+- Vary difficulty: include some easy warmups and some challenging deep-dives
+`;
+
+export const GENERATE_INTERVIEW_ANSWERS_PROMPT = `Generate personalized, interview-ready answers for each question using ONLY the candidate's real experience.
+
+For each question provided, create an answer following this structure:
+
+Return a JSON array:
+[
+  {
+    "question_id": "the id from the question",
+    "question": "the full question text",
+    "suggested_answer": "A complete 3-5 sentence answer using STAR/SPAR format where applicable. Must use REAL metrics and achievements from the resume, correctly attributed to their source company/role.",
+    "key_points": ["3-4 bullet points hitting the main elements to convey"],
+    "metrics_to_mention": ["Specific numbers/metrics from the resume to weave in"],
+    "follow_up_prep": "A likely follow-up question and brief note on how to handle it"
+  }
+]
+
+Answer Guidelines:
+- Use first person ("I led...", "My approach was...")
+- Lead with impact when possible
+- Include specific metrics from the resume (correctly attributed!)
+- Keep answers concise but complete (aim for 60-90 seconds when spoken)
+- For technical questions, demonstrate depth without being pedantic
+- For behavioral questions, use a clear Situation → Action → Result structure
+- Be confident but not arrogant
+- Never claim achievements from companies the candidate didn't work at
+`;
+
+export const EVALUATE_ANSWER_PROMPT = `Evaluate the candidate's practice answer and provide actionable feedback.
+
+Score each dimension from 1-10:
+- Clarity: How clear and well-structured is the answer?
+- Relevance: How well does it address what the interviewer is looking for?
+- Impact: Does it demonstrate meaningful results and value?
+- Strategy: Does it show strategic thinking and business acumen?
+- Storytelling: Is it engaging and memorable?
+
+Return a JSON object:
+{
+  "scores": {
+    "clarity": 0,
+    "relevance": 0,
+    "impact": 0,
+    "strategy": 0,
+    "storytelling": 0
+  },
+  "overall_score": 0,
+  "critique": "2-3 sentences of constructive feedback focusing on the most impactful improvements",
+  "improved_answer": "A rewritten version of their answer incorporating the feedback",
+  "follow_up_question": "A likely follow-up question the interviewer might ask based on this answer"
+}
+
+Be constructive but honest. The goal is rapid improvement, not validation.
+`;
+
+export const GENERATE_QUICK_TIPS_PROMPT = `Based on the role context and candidate profile, generate 5-7 quick strategic tips for this interview.
+
+Return a JSON array of strings, each being a specific, actionable tip:
+[
+  "When discussing [specific technology], emphasize your experience with [specific project] — this directly addresses their need for [JD requirement]",
+  "Be prepared to address why you're transitioning from [current industry] — frame it as [positive angle]",
+  ...
+]
+
+Tips should be:
+- Highly specific to this role and candidate combination
+- Actionable and memorable
+- Strategic (not just "be confident" generic advice)
+- Reference specific experiences, skills, or requirements
+`;
