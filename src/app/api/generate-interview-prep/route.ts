@@ -18,48 +18,16 @@ import type {
   InterviewQuestion
 } from '@/types';
 
-export const maxDuration = 120;
-
-// Step definitions for progress tracking
-const STEPS = {
-  ROLE_CONTEXT: { step: 1, status: 'generating_context', label: 'Analyzing role and resume fit...' },
-  QUESTIONS: { step: 2, status: 'generating_questions', label: 'Generating interview questions...' },
-  ANSWERS: { step: 3, status: 'generating_answers', label: 'Creating personalized answers...' },
-  TIPS: { step: 4, status: 'generating_tips', label: 'Preparing strategic tips...' },
-};
+// Each step should complete within Netlify's timeout
+export const maxDuration = 60;
 
 // Helper to extract JSON from LLM response (handles markdown code blocks)
 function extractJSON(content: string): string {
-  // Try to extract JSON from markdown code blocks
   const jsonBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (jsonBlockMatch) {
     return jsonBlockMatch[1].trim();
   }
-  // Otherwise return content as-is (it might already be valid JSON)
   return content.trim();
-}
-
-// Helper to update progress in database
-async function updateProgress(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  jobId: string,
-  userId: string,
-  step: number,
-  status: string,
-  data?: Record<string, unknown>
-) {
-  const updateData: Record<string, unknown> = {
-    current_step: step,
-    status,
-    updated_at: new Date().toISOString(),
-    ...data,
-  };
-
-  await supabase
-    .from('interview_prep')
-    .update(updateData)
-    .eq('job_id', jobId)
-    .eq('user_id', userId);
 }
 
 export async function POST(request: Request) {
@@ -91,6 +59,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Job ID is required' }, { status: 400 });
     }
 
+    // Check current status - if already in progress, continue from where we left off
+    const { data: existingPrep } = await supabase
+      .from('interview_prep')
+      .select('*')
+      .eq('job_id', jobId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
     // Get job data
     const { data: job, error: jobError } = await supabase
       .from('jobs')
@@ -103,9 +79,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
-    // Get resume data (use job's selected resume or primary)
+    // Get resume data
     let resume = null;
-
     if (job.resume_id) {
       const { data: selectedResume } = await supabase
         .from('resumes')
@@ -115,7 +90,6 @@ export async function POST(request: Request) {
         .maybeSingle();
       resume = selectedResume;
     }
-
     if (!resume) {
       const { data: primaryResume } = await supabase
         .from('resumes')
@@ -140,24 +114,6 @@ export async function POST(request: Request) {
       .eq('id', user.id)
       .single();
 
-    // Create or reset the interview prep record with pending status
-    const initialPrep = {
-      job_id: jobId,
-      user_id: user.id,
-      status: 'pending',
-      current_step: 0,
-      total_steps: 4,
-      role_context: {},
-      questions: {},
-      answers: [],
-      quick_tips: [],
-      error_message: null,
-    };
-
-    await supabase
-      .from('interview_prep')
-      .upsert(initialPrep, { onConflict: 'job_id' });
-
     // Build generation context
     const context: GenerationContext = {
       resume: resume.parsed_data,
@@ -174,169 +130,217 @@ export async function POST(request: Request) {
     const contextStr = buildGenerationContext(context);
     const llm = getLLMClient();
 
-    // Step 1: Generate Role Context Package
-    await updateProgress(supabase, jobId, user.id, STEPS.ROLE_CONTEXT.step, STEPS.ROLE_CONTEXT.status);
+    // Determine which step to run based on current status
+    const currentStep = existingPrep?.current_step || 0;
+    const currentStatus = existingPrep?.status || 'not_started';
 
-    const roleContextResult = await llm.complete({
-      messages: [
-        { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
-        { role: 'user', content: `${GENERATE_ROLE_CONTEXT_PROMPT}\n\n${contextStr}` },
-      ],
-      config: {
-        temperature: 0.7,
-        maxTokens: 2000,
-      },
-    });
+    // If completed or failed, start fresh
+    if (currentStatus === 'completed' || currentStatus === 'failed' || currentStatus === 'not_started') {
+      // Initialize fresh record
+      await supabase
+        .from('interview_prep')
+        .upsert({
+          job_id: jobId,
+          user_id: user.id,
+          status: 'generating_context',
+          current_step: 1,
+          total_steps: 4,
+          role_context: {},
+          questions: {},
+          answers: [],
+          quick_tips: [],
+          error_message: null,
+        }, { onConflict: 'job_id' });
 
-    let roleContext: RoleContextPackage;
-    try {
-      roleContext = JSON.parse(extractJSON(roleContextResult.content));
-    } catch (parseError) {
-      console.error('Failed to parse role context:', roleContextResult.content);
-      await updateProgress(supabase, jobId, user.id, 1, 'failed', {
-        error_message: 'Failed to analyze role context. Please try again.',
-      });
-      return NextResponse.json(
-        { error: 'Failed to generate role context' },
-        { status: 500 }
-      );
+      // Step 1: Generate Role Context
+      try {
+        const roleContextResult = await llm.complete({
+          messages: [
+            { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
+            { role: 'user', content: `${GENERATE_ROLE_CONTEXT_PROMPT}\n\n${contextStr}` },
+          ],
+          config: { temperature: 0.7, maxTokens: 2000 },
+        });
+
+        const roleContext: RoleContextPackage = JSON.parse(extractJSON(roleContextResult.content));
+
+        await supabase
+          .from('interview_prep')
+          .update({
+            role_context: roleContext,
+            status: 'generating_questions',
+            current_step: 2,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('job_id', jobId)
+          .eq('user_id', user.id);
+
+        return NextResponse.json({
+          success: true,
+          status: 'generating_questions',
+          currentStep: 2,
+          message: 'Role context generated. Call again to continue.'
+        });
+      } catch (err) {
+        await supabase
+          .from('interview_prep')
+          .update({ status: 'failed', error_message: 'Failed to generate role context' })
+          .eq('job_id', jobId)
+          .eq('user_id', user.id);
+        throw err;
+      }
     }
 
-    // Save role context progress
-    await updateProgress(supabase, jobId, user.id, STEPS.ROLE_CONTEXT.step, STEPS.ROLE_CONTEXT.status, {
-      role_context: roleContext,
-    });
+    // Step 2: Generate Questions
+    if (currentStep === 2 || currentStatus === 'generating_questions') {
+      const roleContext = existingPrep?.role_context as RoleContextPackage;
 
-    // Step 2: Generate Interview Questions
-    await updateProgress(supabase, jobId, user.id, STEPS.QUESTIONS.step, STEPS.QUESTIONS.status);
+      try {
+        const questionsResult = await llm.complete({
+          messages: [
+            { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
+            { role: 'user', content: `${GENERATE_INTERVIEW_QUESTIONS_PROMPT}\n\nRole Context:\n${JSON.stringify(roleContext, null, 2)}\n\n${contextStr}` },
+          ],
+          config: { temperature: 0.8, maxTokens: 4000 },
+        });
 
-    const questionsResult = await llm.complete({
-      messages: [
-        { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: `${GENERATE_INTERVIEW_QUESTIONS_PROMPT}\n\nRole Context:\n${JSON.stringify(roleContext, null, 2)}\n\n${contextStr}`
-        },
-      ],
-      config: {
-        temperature: 0.8,
-        maxTokens: 4000,
-      },
-    });
+        const questions: InterviewQuestions = JSON.parse(extractJSON(questionsResult.content));
 
-    let questions: InterviewQuestions;
-    try {
-      questions = JSON.parse(extractJSON(questionsResult.content));
-    } catch (parseError) {
-      console.error('Failed to parse questions:', questionsResult.content);
-      await updateProgress(supabase, jobId, user.id, 2, 'failed', {
-        error_message: 'Failed to generate interview questions. Please try again.',
-      });
-      return NextResponse.json(
-        { error: 'Failed to generate interview questions' },
-        { status: 500 }
-      );
+        await supabase
+          .from('interview_prep')
+          .update({
+            questions,
+            status: 'generating_answers',
+            current_step: 3,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('job_id', jobId)
+          .eq('user_id', user.id);
+
+        return NextResponse.json({
+          success: true,
+          status: 'generating_answers',
+          currentStep: 3,
+          message: 'Questions generated. Call again to continue.'
+        });
+      } catch (err) {
+        await supabase
+          .from('interview_prep')
+          .update({ status: 'failed', error_message: 'Failed to generate questions' })
+          .eq('job_id', jobId)
+          .eq('user_id', user.id);
+        throw err;
+      }
     }
 
-    // Save questions progress
-    await updateProgress(supabase, jobId, user.id, STEPS.QUESTIONS.step, STEPS.QUESTIONS.status, {
-      questions,
-    });
+    // Step 3: Generate Answers
+    if (currentStep === 3 || currentStatus === 'generating_answers') {
+      const questions = existingPrep?.questions as InterviewQuestions;
 
-    // Flatten all questions for answer generation
-    const allQuestions: InterviewQuestion[] = [
-      ...questions.behavioral,
-      ...questions.technical,
-      ...questions.culture_fit,
-      ...questions.gap_probing,
-      ...questions.role_specific,
-    ];
+      const allQuestions: InterviewQuestion[] = [
+        ...questions.behavioral,
+        ...questions.technical,
+        ...questions.culture_fit,
+        ...questions.gap_probing,
+        ...questions.role_specific,
+      ];
 
-    // Step 3: Generate Personalized Answers
-    await updateProgress(supabase, jobId, user.id, STEPS.ANSWERS.step, STEPS.ANSWERS.status);
+      try {
+        const answersResult = await llm.complete({
+          messages: [
+            { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
+            { role: 'user', content: `${GENERATE_INTERVIEW_ANSWERS_PROMPT}\n\nQuestions to answer:\n${JSON.stringify(allQuestions, null, 2)}\n\n${contextStr}` },
+          ],
+          config: { temperature: 0.7, maxTokens: 8000 },
+        });
 
-    const answersResult = await llm.complete({
-      messages: [
-        { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: `${GENERATE_INTERVIEW_ANSWERS_PROMPT}\n\nQuestions to answer:\n${JSON.stringify(allQuestions, null, 2)}\n\n${contextStr}`
-        },
-      ],
-      config: {
-        temperature: 0.7,
-        maxTokens: 8000,
-      },
-    });
+        const answers: InterviewAnswer[] = JSON.parse(extractJSON(answersResult.content));
 
-    let answers: InterviewAnswer[];
-    try {
-      answers = JSON.parse(extractJSON(answersResult.content));
-    } catch (parseError) {
-      console.error('Failed to parse answers:', answersResult.content);
-      await updateProgress(supabase, jobId, user.id, 3, 'failed', {
-        error_message: 'Failed to generate interview answers. Please try again.',
-      });
-      return NextResponse.json(
-        { error: 'Failed to generate interview answers' },
-        { status: 500 }
-      );
+        await supabase
+          .from('interview_prep')
+          .update({
+            answers,
+            status: 'generating_tips',
+            current_step: 4,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('job_id', jobId)
+          .eq('user_id', user.id);
+
+        return NextResponse.json({
+          success: true,
+          status: 'generating_tips',
+          currentStep: 4,
+          message: 'Answers generated. Call again to continue.'
+        });
+      } catch (err) {
+        await supabase
+          .from('interview_prep')
+          .update({ status: 'failed', error_message: 'Failed to generate answers' })
+          .eq('job_id', jobId)
+          .eq('user_id', user.id);
+        throw err;
+      }
     }
 
-    // Save answers progress
-    await updateProgress(supabase, jobId, user.id, STEPS.ANSWERS.step, STEPS.ANSWERS.status, {
-      answers,
-    });
+    // Step 4: Generate Tips
+    if (currentStep === 4 || currentStatus === 'generating_tips') {
+      const roleContext = existingPrep?.role_context as RoleContextPackage;
 
-    // Step 4: Generate Quick Tips
-    await updateProgress(supabase, jobId, user.id, STEPS.TIPS.step, STEPS.TIPS.status);
+      try {
+        const tipsResult = await llm.complete({
+          messages: [
+            { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
+            { role: 'user', content: `${GENERATE_QUICK_TIPS_PROMPT}\n\nRole Context:\n${JSON.stringify(roleContext, null, 2)}\n\n${contextStr}` },
+          ],
+          config: { temperature: 0.8, maxTokens: 1000 },
+        });
 
-    const tipsResult = await llm.complete({
-      messages: [
-        { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: `${GENERATE_QUICK_TIPS_PROMPT}\n\nRole Context:\n${JSON.stringify(roleContext, null, 2)}\n\n${contextStr}`
-        },
-      ],
-      config: {
-        temperature: 0.8,
-        maxTokens: 1000,
-      },
-    });
+        let quickTips: string[] = [];
+        try {
+          quickTips = JSON.parse(extractJSON(tipsResult.content));
+        } catch {
+          quickTips = [];
+        }
 
-    let quickTips: string[];
-    try {
-      quickTips = JSON.parse(extractJSON(tipsResult.content));
-    } catch (parseError) {
-      console.error('Failed to parse tips:', tipsResult.content);
-      // Tips are optional, continue with empty array
-      quickTips = [];
+        const { data: finalPrep } = await supabase
+          .from('interview_prep')
+          .update({
+            quick_tips: quickTips,
+            status: 'completed',
+            current_step: 4,
+            generated_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            error_message: null,
+          })
+          .eq('job_id', jobId)
+          .eq('user_id', user.id)
+          .select()
+          .single();
+
+        return NextResponse.json({
+          success: true,
+          status: 'completed',
+          currentStep: 4,
+          prep: finalPrep
+        });
+      } catch (err) {
+        await supabase
+          .from('interview_prep')
+          .update({ status: 'failed', error_message: 'Failed to generate tips' })
+          .eq('job_id', jobId)
+          .eq('user_id', user.id);
+        throw err;
+      }
     }
 
-    // Mark as completed with all data
-    const { data: savedPrep } = await supabase
-      .from('interview_prep')
-      .update({
-        status: 'completed',
-        current_step: 4,
-        role_context: roleContext,
-        questions,
-        answers,
-        quick_tips: quickTips,
-        generated_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        error_message: null,
-      })
-      .eq('job_id', jobId)
-      .eq('user_id', user.id)
-      .select()
-      .single();
-
+    // Shouldn't reach here, but return current status
     return NextResponse.json({
       success: true,
-      prep: savedPrep,
+      status: currentStatus,
+      currentStep: currentStep
     });
+
   } catch (error) {
     console.error('Interview prep generation error:', error);
     return NextResponse.json(
@@ -375,7 +379,6 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Failed to fetch interview prep' }, { status: 500 });
     }
 
-    // Return status info for polling
     return NextResponse.json({
       prep,
       status: prep?.status || 'not_started',

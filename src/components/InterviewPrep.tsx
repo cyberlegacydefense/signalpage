@@ -105,33 +105,7 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
     }
   }, [jobId]);
 
-  useEffect(() => {
-    if (hasAccess) {
-      setLoading(true);
-      fetchPrep().finally(() => setLoading(false));
-    }
-  }, [jobId, hasAccess, fetchPrep]);
-
-  // Polling effect for when generation is in progress
-  useEffect(() => {
-    if (!generating) return;
-
-    const pollInterval = setInterval(async () => {
-      const data = await fetchPrep();
-      if (data?.status === 'completed' || data?.status === 'failed') {
-        clearInterval(pollInterval);
-      }
-    }, 2000); // Poll every 2 seconds
-
-    return () => clearInterval(pollInterval);
-  }, [generating, fetchPrep]);
-
-  const generatePrep = async () => {
-    setGenerating(true);
-    setError(null);
-    setProgressStep(0);
-    setProgressStatus('pending');
-
+  const runGenerationStep = useCallback(async (): Promise<boolean> => {
     try {
       const response = await fetch('/api/generate-interview-prep', {
         method: 'POST',
@@ -145,25 +119,89 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
         throw new Error(data.error || 'Failed to generate interview prep');
       }
 
-      // If we get a direct response with prep data, use it
-      if (data.prep) {
+      // Update progress
+      if (data.currentStep) {
+        setProgressStep(data.currentStep);
+      }
+      if (data.status) {
+        setProgressStatus(data.status);
+      }
+
+      // If completed, we're done
+      if (data.status === 'completed' && data.prep) {
         setPrep(data.prep);
         setGenerating(false);
         setProgressStep(0);
         setProgressStatus('');
+        return true; // Done
       }
+
+      return false; // Not done, continue
     } catch (err) {
-      // Check if this is a timeout - if so, start polling
-      if (err instanceof Error && err.message.includes('timeout')) {
-        // Continue polling - the request may still be processing
-        console.log('Request timed out, continuing to poll for results...');
-      } else {
-        setError(err instanceof Error ? err.message : 'Something went wrong');
-        setGenerating(false);
-        setProgressStep(0);
-        setProgressStatus('');
-      }
+      setError(err instanceof Error ? err.message : 'Something went wrong');
+      setGenerating(false);
+      setProgressStep(0);
+      setProgressStatus('');
+      return true; // Stop on error
     }
+  }, [jobId]);
+
+  useEffect(() => {
+    if (hasAccess) {
+      setLoading(true);
+      fetchPrep().finally(() => setLoading(false));
+    }
+  }, [jobId, hasAccess, fetchPrep]);
+
+  // Polling effect - calls POST to continue generation steps
+  useEffect(() => {
+    if (!generating) return;
+
+    const continueGeneration = async () => {
+      // First check current status
+      const statusData = await fetchPrep();
+
+      if (statusData?.status === 'completed') {
+        setGenerating(false);
+        return true;
+      }
+
+      if (statusData?.status === 'failed') {
+        setError(statusData.errorMessage || 'Generation failed');
+        setGenerating(false);
+        return true;
+      }
+
+      // If still in progress, call POST to run next step
+      if (statusData?.status && !['not_started', 'completed', 'failed'].includes(statusData.status)) {
+        const done = await runGenerationStep();
+        return done;
+      }
+
+      return false;
+    };
+
+    const pollInterval = setInterval(async () => {
+      const done = await continueGeneration();
+      if (done) {
+        clearInterval(pollInterval);
+      }
+    }, 1500); // Check every 1.5 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [generating, fetchPrep, runGenerationStep]);
+
+  const generatePrep = async () => {
+    setGenerating(true);
+    setError(null);
+    setProgressStep(1);
+    setProgressStatus('generating_context');
+
+    // Run first step
+    const done = await runGenerationStep();
+    if (done) return;
+
+    // The polling effect will handle subsequent steps
   };
 
   const toggleQuestion = (questionId: string) => {
