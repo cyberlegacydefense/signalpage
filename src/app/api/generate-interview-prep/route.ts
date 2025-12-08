@@ -233,71 +233,20 @@ export async function POST(request: Request) {
       }
     }
 
-    // Step 3: Generate Answers (first half - behavioral, technical, culture_fit)
-    if (currentStep === 3 || currentStatus === 'generating_answers') {
-      const questions = existingPrep?.questions as InterviewQuestions;
-
-      const firstHalfQuestions: InterviewQuestion[] = [
-        ...questions.behavioral,
-        ...questions.technical,
-        ...questions.culture_fit,
-      ];
-
+    // Helper to generate answers for a single category
+    const generateAnswersForCategory = async (
+      categoryQuestions: InterviewQuestion[],
+      existingAnswers: InterviewAnswer[],
+      nextStatus: string,
+      batchLabel: string
+    ) => {
       try {
         const answersResult = await llm.complete({
           messages: [
             { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
-            { role: 'user', content: `${GENERATE_INTERVIEW_ANSWERS_PROMPT}\n\nQuestions to answer:\n${JSON.stringify(firstHalfQuestions, null, 2)}\n\n${contextStr}` },
+            { role: 'user', content: `${GENERATE_INTERVIEW_ANSWERS_PROMPT}\n\nQuestions to answer:\n${JSON.stringify(categoryQuestions, null, 2)}\n\n${contextStr}` },
           ],
-          config: { temperature: 0.7, maxTokens: 4000 },
-        });
-
-        const answers: InterviewAnswer[] = JSON.parse(extractJSON(answersResult.content));
-
-        await supabase
-          .from('interview_prep')
-          .update({
-            answers, // First batch of answers
-            status: 'generating_answers_2',
-            current_step: 3,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('job_id', jobId)
-          .eq('user_id', user.id);
-
-        return NextResponse.json({
-          success: true,
-          status: 'generating_answers_2',
-          currentStep: 3,
-          message: 'First batch of answers generated. Call again to continue.'
-        });
-      } catch (err) {
-        await supabase
-          .from('interview_prep')
-          .update({ status: 'failed', error_message: 'Failed to generate answers (batch 1)' })
-          .eq('job_id', jobId)
-          .eq('user_id', user.id);
-        throw err;
-      }
-    }
-
-    // Step 3b: Generate Answers (second half - gap_probing, role_specific)
-    if (currentStatus === 'generating_answers_2') {
-      const questions = existingPrep?.questions as InterviewQuestions;
-      const existingAnswers = (existingPrep?.answers || []) as InterviewAnswer[];
-
-      const secondHalfQuestions: InterviewQuestion[] = [
-        ...questions.gap_probing,
-        ...questions.role_specific,
-      ];
-
-      try {
-        const answersResult = await llm.complete({
-          messages: [
-            { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
-            { role: 'user', content: `${GENERATE_INTERVIEW_ANSWERS_PROMPT}\n\nQuestions to answer:\n${JSON.stringify(secondHalfQuestions, null, 2)}\n\n${contextStr}` },
-          ],
-          config: { temperature: 0.7, maxTokens: 3000 },
+          config: { temperature: 0.7, maxTokens: 2000 },
         });
 
         const newAnswers: InterviewAnswer[] = JSON.parse(extractJSON(answersResult.content));
@@ -307,8 +256,7 @@ export async function POST(request: Request) {
           .from('interview_prep')
           .update({
             answers: allAnswers,
-            status: 'generating_tips',
-            current_step: 4,
+            status: nextStatus,
             updated_at: new Date().toISOString(),
           })
           .eq('job_id', jobId)
@@ -316,18 +264,76 @@ export async function POST(request: Request) {
 
         return NextResponse.json({
           success: true,
-          status: 'generating_tips',
-          currentStep: 4,
-          message: 'All answers generated. Call again to continue.'
+          status: nextStatus,
+          message: `${batchLabel} answers generated. Call again to continue.`
         });
       } catch (err) {
         await supabase
           .from('interview_prep')
-          .update({ status: 'failed', error_message: 'Failed to generate answers (batch 2)' })
+          .update({ status: 'failed', error_message: `Failed to generate ${batchLabel} answers` })
           .eq('job_id', jobId)
           .eq('user_id', user.id);
         throw err;
       }
+    };
+
+    // Step 3a: Generate Behavioral Answers
+    if (currentStep === 3 || currentStatus === 'generating_answers') {
+      const questions = existingPrep?.questions as InterviewQuestions;
+      return generateAnswersForCategory(
+        questions.behavioral,
+        [],
+        'generating_answers_technical',
+        'Behavioral'
+      );
+    }
+
+    // Step 3b: Generate Technical Answers
+    if (currentStatus === 'generating_answers_technical') {
+      const questions = existingPrep?.questions as InterviewQuestions;
+      const existingAnswers = (existingPrep?.answers || []) as InterviewAnswer[];
+      return generateAnswersForCategory(
+        questions.technical,
+        existingAnswers,
+        'generating_answers_culture',
+        'Technical'
+      );
+    }
+
+    // Step 3c: Generate Culture Fit Answers
+    if (currentStatus === 'generating_answers_culture') {
+      const questions = existingPrep?.questions as InterviewQuestions;
+      const existingAnswers = (existingPrep?.answers || []) as InterviewAnswer[];
+      return generateAnswersForCategory(
+        questions.culture_fit,
+        existingAnswers,
+        'generating_answers_gap',
+        'Culture fit'
+      );
+    }
+
+    // Step 3d: Generate Gap Probing Answers
+    if (currentStatus === 'generating_answers_gap') {
+      const questions = existingPrep?.questions as InterviewQuestions;
+      const existingAnswers = (existingPrep?.answers || []) as InterviewAnswer[];
+      return generateAnswersForCategory(
+        questions.gap_probing,
+        existingAnswers,
+        'generating_answers_role',
+        'Gap probing'
+      );
+    }
+
+    // Step 3e: Generate Role Specific Answers
+    if (currentStatus === 'generating_answers_role') {
+      const questions = existingPrep?.questions as InterviewQuestions;
+      const existingAnswers = (existingPrep?.answers || []) as InterviewAnswer[];
+      return generateAnswersForCategory(
+        questions.role_specific,
+        existingAnswers,
+        'generating_tips',
+        'Role specific'
+      );
     }
 
     // Step 4: Generate Tips

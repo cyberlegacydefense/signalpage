@@ -61,8 +61,11 @@ const STEP_LABELS = [
   'Starting...',
   'Analyzing role and resume fit...',
   'Generating interview questions...',
-  'Creating personalized answers (1/2)...',
-  'Creating personalized answers (2/2)...',
+  'Creating behavioral answers...',
+  'Creating technical answers...',
+  'Creating culture fit answers...',
+  'Creating gap probing answers...',
+  'Creating role-specific answers...',
   'Preparing strategic tips...',
 ];
 
@@ -71,12 +74,15 @@ const STATUS_TO_STEP: Record<string, number> = {
   'generating_context': 1,
   'generating_questions': 2,
   'generating_answers': 3,
-  'generating_answers_2': 4,
-  'generating_tips': 5,
-  'completed': 6,
+  'generating_answers_technical': 4,
+  'generating_answers_culture': 5,
+  'generating_answers_gap': 6,
+  'generating_answers_role': 7,
+  'generating_tips': 8,
+  'completed': 9,
 };
 
-const ESTIMATED_TIME = '60-90 seconds';
+const ESTIMATED_TIME = '2-3 minutes';
 
 export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
   const [prep, setPrep] = useState<InterviewPrepData | null>(null);
@@ -353,11 +359,11 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
               <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-purple-600 to-indigo-600 transition-all duration-500 ease-out"
-                  style={{ width: `${(progressStep / 5) * 100}%` }}
+                  style={{ width: `${(progressStep / 8) * 100}%` }}
                 />
               </div>
               <p className="mt-2 text-xs text-gray-500">
-                Step {progressStep} of 5
+                Step {progressStep} of 8
               </p>
             </div>
           </div>
