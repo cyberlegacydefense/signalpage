@@ -134,8 +134,26 @@ export async function POST(request: Request) {
     const currentStep = existingPrep?.current_step || 0;
     const currentStatus = existingPrep?.status || 'not_started';
 
-    // If completed or failed, start fresh
-    if (currentStatus === 'completed' || currentStatus === 'failed' || currentStatus === 'not_started') {
+    // Valid in-progress statuses
+    const validInProgressStatuses = [
+      'generating_context',
+      'generating_questions',
+      'generating_answers',
+      'generating_answers_technical',
+      'generating_answers_culture',
+      'generating_answers_gap',
+      'generating_answers_role',
+      'generating_tips',
+    ];
+
+    // If completed, failed, not_started, or unknown/legacy status - start fresh
+    const shouldStartFresh =
+      currentStatus === 'completed' ||
+      currentStatus === 'failed' ||
+      currentStatus === 'not_started' ||
+      !validInProgressStatuses.includes(currentStatus);
+
+    if (shouldStartFresh) {
       // Initialize fresh record
       await supabase
         .from('interview_prep')
@@ -144,7 +162,7 @@ export async function POST(request: Request) {
           user_id: user.id,
           status: 'generating_context',
           current_step: 1,
-          total_steps: 4,
+          total_steps: 8,
           role_context: {},
           questions: {},
           answers: [],
