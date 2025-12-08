@@ -20,6 +20,17 @@ import type {
 
 export const maxDuration = 120;
 
+// Helper to extract JSON from LLM response (handles markdown code blocks)
+function extractJSON(content: string): string {
+  // Try to extract JSON from markdown code blocks
+  const jsonBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (jsonBlockMatch) {
+    return jsonBlockMatch[1].trim();
+  }
+  // Otherwise return content as-is (it might already be valid JSON)
+  return content.trim();
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -128,9 +139,10 @@ export async function POST(request: Request) {
 
     let roleContext: RoleContextPackage;
     try {
-      roleContext = JSON.parse(roleContextResult.content);
-    } catch {
+      roleContext = JSON.parse(extractJSON(roleContextResult.content));
+    } catch (parseError) {
       console.error('Failed to parse role context:', roleContextResult.content);
+      console.error('Parse error:', parseError);
       return NextResponse.json(
         { error: 'Failed to generate role context' },
         { status: 500 }
@@ -154,9 +166,10 @@ export async function POST(request: Request) {
 
     let questions: InterviewQuestions;
     try {
-      questions = JSON.parse(questionsResult.content);
-    } catch {
+      questions = JSON.parse(extractJSON(questionsResult.content));
+    } catch (parseError) {
       console.error('Failed to parse questions:', questionsResult.content);
+      console.error('Parse error:', parseError);
       return NextResponse.json(
         { error: 'Failed to generate interview questions' },
         { status: 500 }
@@ -189,9 +202,10 @@ export async function POST(request: Request) {
 
     let answers: InterviewAnswer[];
     try {
-      answers = JSON.parse(answersResult.content);
-    } catch {
+      answers = JSON.parse(extractJSON(answersResult.content));
+    } catch (parseError) {
       console.error('Failed to parse answers:', answersResult.content);
+      console.error('Parse error:', parseError);
       return NextResponse.json(
         { error: 'Failed to generate interview answers' },
         { status: 500 }
@@ -215,9 +229,10 @@ export async function POST(request: Request) {
 
     let quickTips: string[];
     try {
-      quickTips = JSON.parse(tipsResult.content);
-    } catch {
+      quickTips = JSON.parse(extractJSON(tipsResult.content));
+    } catch (parseError) {
       console.error('Failed to parse tips:', tipsResult.content);
+      console.error('Parse error:', parseError);
       quickTips = [];
     }
 
