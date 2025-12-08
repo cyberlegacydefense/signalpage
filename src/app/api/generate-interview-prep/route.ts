@@ -20,6 +20,14 @@ import type {
 
 export const maxDuration = 120;
 
+// Step definitions for progress tracking
+const STEPS = {
+  ROLE_CONTEXT: { step: 1, status: 'generating_context', label: 'Analyzing role and resume fit...' },
+  QUESTIONS: { step: 2, status: 'generating_questions', label: 'Generating interview questions...' },
+  ANSWERS: { step: 3, status: 'generating_answers', label: 'Creating personalized answers...' },
+  TIPS: { step: 4, status: 'generating_tips', label: 'Preparing strategic tips...' },
+};
+
 // Helper to extract JSON from LLM response (handles markdown code blocks)
 function extractJSON(content: string): string {
   // Try to extract JSON from markdown code blocks
@@ -29,6 +37,29 @@ function extractJSON(content: string): string {
   }
   // Otherwise return content as-is (it might already be valid JSON)
   return content.trim();
+}
+
+// Helper to update progress in database
+async function updateProgress(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  jobId: string,
+  userId: string,
+  step: number,
+  status: string,
+  data?: Record<string, unknown>
+) {
+  const updateData: Record<string, unknown> = {
+    current_step: step,
+    status,
+    updated_at: new Date().toISOString(),
+    ...data,
+  };
+
+  await supabase
+    .from('interview_prep')
+    .update(updateData)
+    .eq('job_id', jobId)
+    .eq('user_id', userId);
 }
 
 export async function POST(request: Request) {
@@ -109,6 +140,24 @@ export async function POST(request: Request) {
       .eq('id', user.id)
       .single();
 
+    // Create or reset the interview prep record with pending status
+    const initialPrep = {
+      job_id: jobId,
+      user_id: user.id,
+      status: 'pending',
+      current_step: 0,
+      total_steps: 4,
+      role_context: {},
+      questions: {},
+      answers: [],
+      quick_tips: [],
+      error_message: null,
+    };
+
+    await supabase
+      .from('interview_prep')
+      .upsert(initialPrep, { onConflict: 'job_id' });
+
     // Build generation context
     const context: GenerationContext = {
       resume: resume.parsed_data,
@@ -126,6 +175,8 @@ export async function POST(request: Request) {
     const llm = getLLMClient();
 
     // Step 1: Generate Role Context Package
+    await updateProgress(supabase, jobId, user.id, STEPS.ROLE_CONTEXT.step, STEPS.ROLE_CONTEXT.status);
+
     const roleContextResult = await llm.complete({
       messages: [
         { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
@@ -142,14 +193,23 @@ export async function POST(request: Request) {
       roleContext = JSON.parse(extractJSON(roleContextResult.content));
     } catch (parseError) {
       console.error('Failed to parse role context:', roleContextResult.content);
-      console.error('Parse error:', parseError);
+      await updateProgress(supabase, jobId, user.id, 1, 'failed', {
+        error_message: 'Failed to analyze role context. Please try again.',
+      });
       return NextResponse.json(
         { error: 'Failed to generate role context' },
         { status: 500 }
       );
     }
 
+    // Save role context progress
+    await updateProgress(supabase, jobId, user.id, STEPS.ROLE_CONTEXT.step, STEPS.ROLE_CONTEXT.status, {
+      role_context: roleContext,
+    });
+
     // Step 2: Generate Interview Questions
+    await updateProgress(supabase, jobId, user.id, STEPS.QUESTIONS.step, STEPS.QUESTIONS.status);
+
     const questionsResult = await llm.complete({
       messages: [
         { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
@@ -169,12 +229,19 @@ export async function POST(request: Request) {
       questions = JSON.parse(extractJSON(questionsResult.content));
     } catch (parseError) {
       console.error('Failed to parse questions:', questionsResult.content);
-      console.error('Parse error:', parseError);
+      await updateProgress(supabase, jobId, user.id, 2, 'failed', {
+        error_message: 'Failed to generate interview questions. Please try again.',
+      });
       return NextResponse.json(
         { error: 'Failed to generate interview questions' },
         { status: 500 }
       );
     }
+
+    // Save questions progress
+    await updateProgress(supabase, jobId, user.id, STEPS.QUESTIONS.step, STEPS.QUESTIONS.status, {
+      questions,
+    });
 
     // Flatten all questions for answer generation
     const allQuestions: InterviewQuestion[] = [
@@ -186,6 +253,8 @@ export async function POST(request: Request) {
     ];
 
     // Step 3: Generate Personalized Answers
+    await updateProgress(supabase, jobId, user.id, STEPS.ANSWERS.step, STEPS.ANSWERS.status);
+
     const answersResult = await llm.complete({
       messages: [
         { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
@@ -205,14 +274,23 @@ export async function POST(request: Request) {
       answers = JSON.parse(extractJSON(answersResult.content));
     } catch (parseError) {
       console.error('Failed to parse answers:', answersResult.content);
-      console.error('Parse error:', parseError);
+      await updateProgress(supabase, jobId, user.id, 3, 'failed', {
+        error_message: 'Failed to generate interview answers. Please try again.',
+      });
       return NextResponse.json(
         { error: 'Failed to generate interview answers' },
         { status: 500 }
       );
     }
 
+    // Save answers progress
+    await updateProgress(supabase, jobId, user.id, STEPS.ANSWERS.step, STEPS.ANSWERS.status, {
+      answers,
+    });
+
     // Step 4: Generate Quick Tips
+    await updateProgress(supabase, jobId, user.id, STEPS.TIPS.step, STEPS.TIPS.status);
+
     const tipsResult = await llm.complete({
       messages: [
         { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
@@ -232,36 +310,32 @@ export async function POST(request: Request) {
       quickTips = JSON.parse(extractJSON(tipsResult.content));
     } catch (parseError) {
       console.error('Failed to parse tips:', tipsResult.content);
-      console.error('Parse error:', parseError);
+      // Tips are optional, continue with empty array
       quickTips = [];
     }
 
-    // Store the interview prep data
-    const interviewPrep = {
-      job_id: jobId,
-      user_id: user.id,
-      role_context: roleContext,
-      questions,
-      answers,
-      quick_tips: quickTips,
-      generated_at: new Date().toISOString(),
-    };
-
-    // Upsert interview prep (update if exists for this job)
-    const { data: savedPrep, error: saveError } = await supabase
+    // Mark as completed with all data
+    const { data: savedPrep } = await supabase
       .from('interview_prep')
-      .upsert(interviewPrep, { onConflict: 'job_id' })
+      .update({
+        status: 'completed',
+        current_step: 4,
+        role_context: roleContext,
+        questions,
+        answers,
+        quick_tips: quickTips,
+        generated_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        error_message: null,
+      })
+      .eq('job_id', jobId)
+      .eq('user_id', user.id)
       .select()
       .single();
 
-    if (saveError) {
-      console.error('Failed to save interview prep:', saveError);
-      // Still return the data even if save fails
-    }
-
     return NextResponse.json({
       success: true,
-      prep: savedPrep || interviewPrep,
+      prep: savedPrep,
     });
   } catch (error) {
     console.error('Interview prep generation error:', error);
@@ -272,7 +346,7 @@ export async function POST(request: Request) {
   }
 }
 
-// GET endpoint to retrieve existing interview prep
+// GET endpoint to retrieve existing interview prep or poll for status
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();
@@ -301,7 +375,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Failed to fetch interview prep' }, { status: 500 });
     }
 
-    return NextResponse.json({ prep });
+    // Return status info for polling
+    return NextResponse.json({
+      prep,
+      status: prep?.status || 'not_started',
+      currentStep: prep?.current_step || 0,
+      totalSteps: prep?.total_steps || 4,
+      errorMessage: prep?.error_message,
+    });
   } catch (error) {
     console.error('Interview prep fetch error:', error);
     return NextResponse.json(

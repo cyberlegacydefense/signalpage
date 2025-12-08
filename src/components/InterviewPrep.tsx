@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
 import type {
   RoleContextPackage,
@@ -21,6 +21,18 @@ interface InterviewPrepData {
   answers: InterviewAnswer[];
   quick_tips: string[];
   generated_at: string;
+  status?: string;
+  current_step?: number;
+  total_steps?: number;
+  error_message?: string;
+}
+
+interface PollResponse {
+  prep: InterviewPrepData | null;
+  status: string;
+  currentStep: number;
+  totalSteps: number;
+  errorMessage: string | null;
 }
 
 const CATEGORY_LABELS: Record<QuestionCategory, string> = {
@@ -45,6 +57,16 @@ const DIFFICULTY_COLORS = {
   hard: 'bg-red-100 text-red-700',
 };
 
+const STEP_LABELS = [
+  'Starting...',
+  'Analyzing role and resume fit...',
+  'Generating interview questions...',
+  'Creating personalized answers...',
+  'Preparing strategic tips...',
+];
+
+const ESTIMATED_TIME = '60-90 seconds';
+
 export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
   const [prep, setPrep] = useState<InterviewPrepData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -52,31 +74,64 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
   const [error, setError] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<QuestionCategory | 'all'>('all');
   const [expandedQuestions, setExpandedQuestions] = useState<Set<string>>(new Set());
+  const [progressStep, setProgressStep] = useState(0);
+  const [progressStatus, setProgressStatus] = useState<string>('');
+
+  const fetchPrep = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/generate-interview-prep?jobId=${jobId}`);
+      const data: PollResponse = await response.json();
+
+      if (data.prep && data.status === 'completed') {
+        setPrep(data.prep);
+        setGenerating(false);
+        setProgressStep(0);
+        setProgressStatus('');
+      } else if (data.status === 'failed') {
+        setError(data.errorMessage || 'Generation failed. Please try again.');
+        setGenerating(false);
+        setProgressStep(0);
+        setProgressStatus('');
+      } else if (data.status && data.status !== 'not_started' && data.status !== 'completed') {
+        // Still generating - update progress
+        setProgressStep(data.currentStep);
+        setProgressStatus(data.status);
+      }
+
+      return data;
+    } catch (err) {
+      console.error('Failed to fetch interview prep:', err);
+      return null;
+    }
+  }, [jobId]);
 
   useEffect(() => {
     if (hasAccess) {
-      fetchPrep();
+      setLoading(true);
+      fetchPrep().finally(() => setLoading(false));
     }
-  }, [jobId, hasAccess]);
+  }, [jobId, hasAccess, fetchPrep]);
 
-  const fetchPrep = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(`/api/generate-interview-prep?jobId=${jobId}`);
-      const data = await response.json();
-      if (data.prep) {
-        setPrep(data.prep);
+  // Polling effect for when generation is in progress
+  useEffect(() => {
+    if (!generating) return;
+
+    const pollInterval = setInterval(async () => {
+      const data = await fetchPrep();
+      if (data?.status === 'completed' || data?.status === 'failed') {
+        clearInterval(pollInterval);
       }
-    } catch (err) {
-      console.error('Failed to fetch interview prep:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    }, 2000); // Poll every 2 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [generating, fetchPrep]);
 
   const generatePrep = async () => {
     setGenerating(true);
     setError(null);
+    setProgressStep(0);
+    setProgressStatus('pending');
+
     try {
       const response = await fetch('/api/generate-interview-prep', {
         method: 'POST',
@@ -90,11 +145,24 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
         throw new Error(data.error || 'Failed to generate interview prep');
       }
 
-      setPrep(data.prep);
+      // If we get a direct response with prep data, use it
+      if (data.prep) {
+        setPrep(data.prep);
+        setGenerating(false);
+        setProgressStep(0);
+        setProgressStatus('');
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
-    } finally {
-      setGenerating(false);
+      // Check if this is a timeout - if so, start polling
+      if (err instanceof Error && err.message.includes('timeout')) {
+        // Continue polling - the request may still be processing
+        console.log('Request timed out, continuing to poll for results...');
+      } else {
+        setError(err instanceof Error ? err.message : 'Something went wrong');
+        setGenerating(false);
+        setProgressStep(0);
+        setProgressStatus('');
+      }
     }
   };
 
@@ -167,6 +235,86 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
     );
   }
 
+  // Show progress UI when generating
+  if (generating || (progressStatus && progressStatus !== 'completed' && progressStatus !== 'failed')) {
+    return (
+      <Card>
+        <CardContent className="py-12">
+          <div className="max-w-md mx-auto text-center">
+            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-purple-100">
+              <svg className="h-8 w-8 text-purple-600 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+            </div>
+
+            <h3 className="mb-2 text-lg font-semibold text-gray-900">
+              Generating Your Interview Prep
+            </h3>
+            <p className="mb-6 text-sm text-gray-500">
+              This typically takes {ESTIMATED_TIME}. You can stay on this page or come back later.
+            </p>
+
+            {/* Progress Steps */}
+            <div className="space-y-3 text-left">
+              {STEP_LABELS.slice(1).map((label, index) => {
+                const stepNum = index + 1;
+                const isActive = progressStep === stepNum;
+                const isComplete = progressStep > stepNum;
+
+                return (
+                  <div key={stepNum} className="flex items-center gap-3">
+                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-medium ${
+                      isComplete
+                        ? 'bg-green-100 text-green-700'
+                        : isActive
+                          ? 'bg-purple-100 text-purple-700'
+                          : 'bg-gray-100 text-gray-400'
+                    }`}>
+                      {isComplete ? (
+                        <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      ) : (
+                        stepNum
+                      )}
+                    </div>
+                    <span className={`text-sm ${
+                      isComplete
+                        ? 'text-green-700'
+                        : isActive
+                          ? 'text-purple-700 font-medium'
+                          : 'text-gray-400'
+                    }`}>
+                      {label}
+                      {isActive && (
+                        <span className="inline-block ml-2">
+                          <span className="inline-block animate-pulse">...</span>
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Progress Bar */}
+            <div className="mt-6">
+              <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-purple-600 to-indigo-600 transition-all duration-500 ease-out"
+                  style={{ width: `${(progressStep / 4) * 100}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs text-gray-500">
+                Step {progressStep} of 4
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (!prep) {
     return (
       <Card>
@@ -179,8 +327,11 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
           <h3 className="mb-2 text-lg font-semibold text-gray-900">
             Prepare for Your Interview
           </h3>
-          <p className="mb-6 text-gray-600">
+          <p className="mb-2 text-gray-600">
             Generate role-specific interview questions with personalized answers based on your resume and this job description.
+          </p>
+          <p className="mb-6 text-sm text-gray-500">
+            Estimated time: {ESTIMATED_TIME}
           </p>
           {error && (
             <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
@@ -194,7 +345,7 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
             disabled={generating}
             className="bg-gradient-to-r from-purple-600 to-indigo-600"
           >
-            {generating ? 'Generating (60-90 seconds)...' : 'Generate Interview Prep'}
+            Generate Interview Prep
           </Button>
         </CardContent>
       </Card>
