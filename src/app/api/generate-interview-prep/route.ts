@@ -233,14 +233,60 @@ export async function POST(request: Request) {
       }
     }
 
-    // Step 3: Generate Answers
+    // Step 3: Generate Answers (first half - behavioral, technical, culture_fit)
     if (currentStep === 3 || currentStatus === 'generating_answers') {
       const questions = existingPrep?.questions as InterviewQuestions;
 
-      const allQuestions: InterviewQuestion[] = [
+      const firstHalfQuestions: InterviewQuestion[] = [
         ...questions.behavioral,
         ...questions.technical,
         ...questions.culture_fit,
+      ];
+
+      try {
+        const answersResult = await llm.complete({
+          messages: [
+            { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
+            { role: 'user', content: `${GENERATE_INTERVIEW_ANSWERS_PROMPT}\n\nQuestions to answer:\n${JSON.stringify(firstHalfQuestions, null, 2)}\n\n${contextStr}` },
+          ],
+          config: { temperature: 0.7, maxTokens: 4000 },
+        });
+
+        const answers: InterviewAnswer[] = JSON.parse(extractJSON(answersResult.content));
+
+        await supabase
+          .from('interview_prep')
+          .update({
+            answers, // First batch of answers
+            status: 'generating_answers_2',
+            current_step: 3,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('job_id', jobId)
+          .eq('user_id', user.id);
+
+        return NextResponse.json({
+          success: true,
+          status: 'generating_answers_2',
+          currentStep: 3,
+          message: 'First batch of answers generated. Call again to continue.'
+        });
+      } catch (err) {
+        await supabase
+          .from('interview_prep')
+          .update({ status: 'failed', error_message: 'Failed to generate answers (batch 1)' })
+          .eq('job_id', jobId)
+          .eq('user_id', user.id);
+        throw err;
+      }
+    }
+
+    // Step 3b: Generate Answers (second half - gap_probing, role_specific)
+    if (currentStatus === 'generating_answers_2') {
+      const questions = existingPrep?.questions as InterviewQuestions;
+      const existingAnswers = (existingPrep?.answers || []) as InterviewAnswer[];
+
+      const secondHalfQuestions: InterviewQuestion[] = [
         ...questions.gap_probing,
         ...questions.role_specific,
       ];
@@ -249,17 +295,18 @@ export async function POST(request: Request) {
         const answersResult = await llm.complete({
           messages: [
             { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
-            { role: 'user', content: `${GENERATE_INTERVIEW_ANSWERS_PROMPT}\n\nQuestions to answer:\n${JSON.stringify(allQuestions, null, 2)}\n\n${contextStr}` },
+            { role: 'user', content: `${GENERATE_INTERVIEW_ANSWERS_PROMPT}\n\nQuestions to answer:\n${JSON.stringify(secondHalfQuestions, null, 2)}\n\n${contextStr}` },
           ],
-          config: { temperature: 0.7, maxTokens: 8000 },
+          config: { temperature: 0.7, maxTokens: 3000 },
         });
 
-        const answers: InterviewAnswer[] = JSON.parse(extractJSON(answersResult.content));
+        const newAnswers: InterviewAnswer[] = JSON.parse(extractJSON(answersResult.content));
+        const allAnswers = [...existingAnswers, ...newAnswers];
 
         await supabase
           .from('interview_prep')
           .update({
-            answers,
+            answers: allAnswers,
             status: 'generating_tips',
             current_step: 4,
             updated_at: new Date().toISOString(),
@@ -271,12 +318,12 @@ export async function POST(request: Request) {
           success: true,
           status: 'generating_tips',
           currentStep: 4,
-          message: 'Answers generated. Call again to continue.'
+          message: 'All answers generated. Call again to continue.'
         });
       } catch (err) {
         await supabase
           .from('interview_prep')
-          .update({ status: 'failed', error_message: 'Failed to generate answers' })
+          .update({ status: 'failed', error_message: 'Failed to generate answers (batch 2)' })
           .eq('job_id', jobId)
           .eq('user_id', user.id);
         throw err;

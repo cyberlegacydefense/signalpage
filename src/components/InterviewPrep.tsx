@@ -61,9 +61,20 @@ const STEP_LABELS = [
   'Starting...',
   'Analyzing role and resume fit...',
   'Generating interview questions...',
-  'Creating personalized answers...',
+  'Creating personalized answers (1/2)...',
+  'Creating personalized answers (2/2)...',
   'Preparing strategic tips...',
 ];
+
+// Map API status to step number for display
+const STATUS_TO_STEP: Record<string, number> = {
+  'generating_context': 1,
+  'generating_questions': 2,
+  'generating_answers': 3,
+  'generating_answers_2': 4,
+  'generating_tips': 5,
+  'completed': 6,
+};
 
 const ESTIMATED_TIME = '60-90 seconds';
 
@@ -93,8 +104,9 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
         setProgressStep(0);
         setProgressStatus('');
       } else if (data.status && data.status !== 'not_started' && data.status !== 'completed') {
-        // Still generating - update progress
-        setProgressStep(data.currentStep);
+        // Still generating - update progress using status-to-step mapping
+        const displayStep = STATUS_TO_STEP[data.status] || data.currentStep;
+        setProgressStep(displayStep);
         setProgressStatus(data.status);
       }
 
@@ -119,12 +131,13 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
         throw new Error(data.error || 'Failed to generate interview prep');
       }
 
-      // Update progress
-      if (data.currentStep) {
-        setProgressStep(data.currentStep);
-      }
+      // Update progress using status-to-step mapping for accurate display
       if (data.status) {
+        const displayStep = STATUS_TO_STEP[data.status] || data.currentStep;
+        setProgressStep(displayStep);
         setProgressStatus(data.status);
+      } else if (data.currentStep) {
+        setProgressStep(data.currentStep);
       }
 
       // If completed, we're done
@@ -340,11 +353,11 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
               <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-purple-600 to-indigo-600 transition-all duration-500 ease-out"
-                  style={{ width: `${(progressStep / 4) * 100}%` }}
+                  style={{ width: `${(progressStep / 5) * 100}%` }}
                 />
               </div>
               <p className="mt-2 text-xs text-gray-500">
-                Step {progressStep} of 4
+                Step {progressStep} of 5
               </p>
             </div>
           </div>
