@@ -695,7 +695,8 @@ export default function ProfilePage() {
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-gray-900">
                       {subscription.isFreeUser ? 'Free (Unlimited)' :
-                       subscription.tier === 'free' ? 'Free Plan' : 'Pro Plan'}
+                       subscription.tier === 'free' ? 'Free Plan' :
+                       subscription.tier === 'coach' ? 'Interview Coach' : 'Pro Plan'}
                     </span>
                     {subscription.isFreeUser && (
                       <Badge variant="success">Special Access</Badge>
@@ -709,6 +710,8 @@ export default function ProfilePage() {
                       'You have unlimited access to all features'
                     ) : subscription.tier === 'free' ? (
                       `${subscription.currentPageCount} of ${subscription.maxPages} pages used`
+                    ) : subscription.tier === 'coach' ? (
+                      'Unlimited Signal Pages + AI Interview Coach'
                     ) : (
                       'Unlimited Signal Pages'
                     )}
