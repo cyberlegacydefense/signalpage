@@ -251,6 +251,21 @@ export async function POST(request: Request) {
       }
     }
 
+    // Build a condensed context for answer generation (smaller prompt = faster)
+    const condensedContext = `
+## Candidate: ${context.user.full_name || 'Candidate'}
+
+## Key Experience:
+${context.resume.experiences.slice(0, 3).map(exp =>
+  `- ${exp.title} at ${exp.company}: ${exp.achievements.slice(0, 3).join('; ')}`
+).join('\n')}
+
+## Key Skills: ${context.resume.skills.slice(0, 15).join(', ')}
+
+## Target Role: ${job.role_title} at ${job.company_name}
+Key Requirements: ${job.parsed_requirements?.required_skills?.slice(0, 10).join(', ') || 'See job description'}
+`.trim();
+
     // Helper to generate answers for a single category
     const generateAnswersForCategory = async (
       categoryQuestions: InterviewQuestion[],
@@ -259,12 +274,13 @@ export async function POST(request: Request) {
       batchLabel: string
     ) => {
       try {
+        // Use gpt-4o-mini for faster answer generation
         const answersResult = await llm.complete({
           messages: [
-            { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
-            { role: 'user', content: `${GENERATE_INTERVIEW_ANSWERS_PROMPT}\n\nQuestions to answer:\n${JSON.stringify(categoryQuestions, null, 2)}\n\n${contextStr}` },
+            { role: 'system', content: 'You are an expert interview coach. Generate concise, impactful interview answers using ONLY the candidate\'s real experience. Use STAR format. Be specific with metrics. Output valid JSON.' },
+            { role: 'user', content: `${GENERATE_INTERVIEW_ANSWERS_PROMPT}\n\nQuestions:\n${JSON.stringify(categoryQuestions, null, 2)}\n\n${condensedContext}` },
           ],
-          config: { temperature: 0.7, maxTokens: 2000 },
+          config: { model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2000 },
         });
 
         const newAnswers: InterviewAnswer[] = JSON.parse(extractJSON(answersResult.content));
