@@ -274,13 +274,13 @@ Key Requirements: ${job.parsed_requirements?.required_skills?.slice(0, 10).join(
       batchLabel: string
     ) => {
       try {
-        // Use gpt-4o-mini for faster answer generation
+        // Use Claude for faster, high-quality answer generation
         const answersResult = await llm.complete({
           messages: [
-            { role: 'system', content: 'You are an expert interview coach. Generate concise, impactful interview answers using ONLY the candidate\'s real experience. Use STAR format. Be specific with metrics. Output valid JSON.' },
+            { role: 'system', content: 'You are an expert interview coach. Generate concise, impactful interview answers using ONLY the candidate\'s real experience. Use STAR format. Be specific with metrics. Output valid JSON only - no markdown code blocks.' },
             { role: 'user', content: `${GENERATE_INTERVIEW_ANSWERS_PROMPT}\n\nQuestions:\n${JSON.stringify(categoryQuestions, null, 2)}\n\n${condensedContext}` },
           ],
-          config: { model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2000 },
+          config: { provider: 'anthropic', temperature: 0.7, maxTokens: 2000 },
         });
 
         const newAnswers: InterviewAnswer[] = JSON.parse(extractJSON(answersResult.content));
