@@ -261,7 +261,7 @@ export async function POST(request: Request) {
           { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
           { role: 'user', content: `${GENERATE_ROLE_CONTEXT_PROMPT}\n\n${contextStr}` },
         ],
-        config: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', temperature: 0.7, maxTokens: 2000 },
+        config: { provider: 'openai', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2000 },
       });
 
       const { data: roleContext, error: parseError } = safeParseJSON<RoleContextPackage>(
@@ -308,7 +308,7 @@ export async function POST(request: Request) {
           { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
           { role: 'user', content: `${GENERATE_ROLE_CONTEXT_PROMPT}\n\n${contextStr}` },
         ],
-        config: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', temperature: 0.7, maxTokens: 2000 },
+        config: { provider: 'openai', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2000 },
       });
 
       const { data: roleContext, error: parseError } = safeParseJSON<RoleContextPackage>(
@@ -366,7 +366,7 @@ export async function POST(request: Request) {
           { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
           { role: 'user', content: `${GENERATE_INTERVIEW_QUESTIONS_PROMPT}\n\nRole Context:\n${JSON.stringify(roleContext, null, 2)}\n\n${contextStr}` },
         ],
-        config: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', temperature: 0.8, maxTokens: 4000 },
+        config: { provider: 'openai', model: 'gpt-4o-mini', temperature: 0.8, maxTokens: 4000 },
       });
 
       const { data: questions, error: parseError } = safeParseJSON<InterviewQuestions>(
@@ -486,7 +486,7 @@ Key Requirements: ${job.parsed_requirements?.required_skills?.slice(0, 10).join(
           { role: 'system', content: 'You are an expert interview coach. Generate concise, impactful interview answers using ONLY the candidate\'s real experience. Use STAR format. Be specific with metrics. Output valid JSON only - no markdown code blocks.' },
           { role: 'user', content: `${GENERATE_INTERVIEW_ANSWERS_PROMPT}\n\nQuestions:\n${JSON.stringify(categoryQuestions, null, 2)}\n\n${condensedContext}` },
         ],
-        config: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', temperature: 0.7, maxTokens: 2000 },
+        config: { provider: 'openai', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2000 },
       });
 
       const { data: newAnswers, error: parseError } = safeParseJSON<InterviewAnswer[]>(
@@ -607,7 +607,7 @@ Key Requirements: ${job.parsed_requirements?.required_skills?.slice(0, 10).join(
           { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
           { role: 'user', content: `${GENERATE_QUICK_TIPS_PROMPT}\n\nRole Context:\n${JSON.stringify(roleContext, null, 2)}\n\n${contextStr}` },
         ],
-        config: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', temperature: 0.8, maxTokens: 1000 },
+        config: { provider: 'openai', model: 'gpt-4o-mini', temperature: 0.8, maxTokens: 1000 },
       });
 
       let quickTips: string[] = [];
