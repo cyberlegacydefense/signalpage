@@ -94,6 +94,7 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
   const [progressStep, setProgressStep] = useState(0);
   const [progressStatus, setProgressStatus] = useState<string>('');
   const [consecutiveErrors, setConsecutiveErrors] = useState(0);
+  const [isStuck, setIsStuck] = useState(false);
 
   const fetchPrep = useCallback(async () => {
     try {
@@ -105,16 +106,26 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
         setGenerating(false);
         setProgressStep(0);
         setProgressStatus('');
+        setIsStuck(false);
       } else if (data.status === 'failed') {
         setError(data.errorMessage || 'Generation failed. Please try again.');
         setGenerating(false);
         setProgressStep(0);
         setProgressStatus('');
+        setIsStuck(false);
       } else if (data.status && data.status !== 'not_started' && data.status !== 'completed') {
-        // Still generating - update progress using status-to-step mapping
+        // In-progress status found - check if we're actively generating
         const displayStep = STATUS_TO_STEP[data.status] || data.currentStep;
         setProgressStep(displayStep);
         setProgressStatus(data.status);
+
+        // If we're not actively generating but found in-progress status, it's stuck
+        if (!generating) {
+          setIsStuck(true);
+        }
+      } else {
+        // not_started or unknown - clear stuck state
+        setIsStuck(false);
       }
 
       return data;
@@ -122,7 +133,7 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
       console.error('Failed to fetch interview prep:', err);
       return null;
     }
-  }, [jobId]);
+  }, [jobId, generating]);
 
   const runGenerationStep = useCallback(async (forceReset = false): Promise<boolean> => {
     try {
@@ -231,6 +242,7 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
     setProgressStep(1);
     setProgressStatus('generating_context');
     setConsecutiveErrors(0);
+    setIsStuck(false);
 
     // Run first step with forceReset flag
     const done = await runGenerationStep(forceReset);
@@ -254,6 +266,8 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
       setError(null);
       setProgressStep(0);
       setProgressStatus('');
+      setIsStuck(false);
+      setGenerating(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reset interview prep');
     }
@@ -376,9 +390,60 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
     );
   };
 
-  // Show progress UI when generating
-  if (generating || (progressStatus && progressStatus !== 'completed' && progressStatus !== 'failed')) {
+  // Show stuck UI when generation was interrupted
+  if (isStuck && !generating) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">
+            <svg className="h-8 w-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h3 className="mb-2 text-lg font-semibold text-gray-900">
+            Generation Interrupted
+          </h3>
+          <p className="mb-2 text-gray-600">
+            A previous generation was interrupted at step {progressStep} of 8.
+          </p>
+          <p className="mb-6 text-sm text-gray-500">
+            Status: {progressStatus}
+          </p>
+          {error && (
+            <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+          <div className="flex justify-center gap-3">
+            <Button
+              variant="outline"
+              onClick={resetPrep}
+            >
+              Reset
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => generatePrep(true)}
+              className="bg-gradient-to-r from-purple-600 to-indigo-600"
+            >
+              Start Fresh
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Show progress UI when actively generating
+  if (generating) {
     const overallPercent = (progressStep / 8) * 100;
+
+    const handleCancel = async () => {
+      setGenerating(false);
+      setProgressStep(0);
+      setProgressStatus('');
+      await resetPrep();
+    };
 
     return (
       <Card>
@@ -464,6 +529,16 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
                 <span className="font-medium">Step {progressStep} of 8:</span>{' '}
                 {STEP_LABELS[progressStep] || 'Processing...'}
               </p>
+            </div>
+
+            {/* Cancel/Reset button */}
+            <div className="mt-6 text-center">
+              <button
+                onClick={handleCancel}
+                className="text-sm text-gray-500 hover:text-gray-700 underline"
+              >
+                Cancel and reset
+              </button>
             </div>
           </div>
         </CardContent>
