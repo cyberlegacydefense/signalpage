@@ -134,6 +134,8 @@ export async function POST(request: Request) {
     const currentStep = existingPrep?.current_step || 0;
     const currentStatus = existingPrep?.status || 'not_started';
 
+    console.log(`[Interview Prep] Job ${jobId}: status=${currentStatus}, step=${currentStep}`);
+
     // Valid in-progress statuses
     const validInProgressStatuses = [
       'generating_context',
@@ -146,12 +148,21 @@ export async function POST(request: Request) {
       'generating_tips',
     ];
 
-    // If completed, failed, not_started, or unknown/legacy status - start fresh
+    // Check if generation is stuck (last update > 2 minutes ago)
+    const lastUpdate = existingPrep?.updated_at ? new Date(existingPrep.updated_at) : null;
+    const isStuck = lastUpdate && (Date.now() - lastUpdate.getTime() > 2 * 60 * 1000);
+
+    if (isStuck && validInProgressStatuses.includes(currentStatus)) {
+      console.log(`[Interview Prep] Job ${jobId}: Detected stuck generation (last update: ${lastUpdate}), restarting...`);
+    }
+
+    // If completed, failed, not_started, unknown/legacy status, or stuck - start fresh
     const shouldStartFresh =
       currentStatus === 'completed' ||
       currentStatus === 'failed' ||
       currentStatus === 'not_started' ||
-      !validInProgressStatuses.includes(currentStatus);
+      !validInProgressStatuses.includes(currentStatus) ||
+      isStuck;
 
     if (shouldStartFresh) {
       // Initialize fresh record
@@ -285,6 +296,9 @@ Key Requirements: ${job.parsed_requirements?.required_skills?.slice(0, 10).join(
       nextStatus: string,
       batchLabel: string
     ) => {
+      const startTime = Date.now();
+      console.log(`[${batchLabel}] Starting answer generation for ${categoryQuestions.length} questions...`);
+
       try {
         // Use gpt-4o-mini for faster answer generation
         const answersResult = await llm.complete({
@@ -295,9 +309,12 @@ Key Requirements: ${job.parsed_requirements?.required_skills?.slice(0, 10).join(
           config: { provider: 'openai', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2000 },
         });
 
-        const newAnswers: InterviewAnswer[] = JSON.parse(extractJSON(answersResult.content));
-        const allAnswers = [...existingAnswers, ...newAnswers];
+        console.log(`[${batchLabel}] LLM completed in ${Date.now() - startTime}ms`);
 
+        const newAnswers: InterviewAnswer[] = JSON.parse(extractJSON(answersResult.content));
+        console.log(`[${batchLabel}] Parsed ${newAnswers.length} answers`);
+
+        const allAnswers = [...existingAnswers, ...newAnswers];
         const nextStep = STATUS_STEP_MAP[nextStatus] || 3;
 
         await supabase
@@ -311,6 +328,8 @@ Key Requirements: ${job.parsed_requirements?.required_skills?.slice(0, 10).join(
           .eq('job_id', jobId)
           .eq('user_id', user.id);
 
+        console.log(`[${batchLabel}] Updated DB, moving to ${nextStatus} (step ${nextStep})`);
+
         return NextResponse.json({
           success: true,
           status: nextStatus,
@@ -318,9 +337,10 @@ Key Requirements: ${job.parsed_requirements?.required_skills?.slice(0, 10).join(
           message: `${batchLabel} answers generated. Call again to continue.`
         });
       } catch (err) {
+        console.error(`[${batchLabel}] Error after ${Date.now() - startTime}ms:`, err);
         await supabase
           .from('interview_prep')
-          .update({ status: 'failed', error_message: `Failed to generate ${batchLabel} answers` })
+          .update({ status: 'failed', error_message: `Failed to generate ${batchLabel} answers: ${err instanceof Error ? err.message : 'Unknown error'}` })
           .eq('job_id', jobId)
           .eq('user_id', user.id);
         throw err;
@@ -330,6 +350,19 @@ Key Requirements: ${job.parsed_requirements?.required_skills?.slice(0, 10).join(
     // Step 3a: Generate Behavioral Answers
     if (currentStep === 3 || currentStatus === 'generating_answers') {
       const questions = existingPrep?.questions as InterviewQuestions;
+
+      // Validate questions exist
+      if (!questions?.behavioral?.length) {
+        console.error('No behavioral questions found:', questions);
+        await supabase
+          .from('interview_prep')
+          .update({ status: 'failed', error_message: 'No behavioral questions generated' })
+          .eq('job_id', jobId)
+          .eq('user_id', user.id);
+        return NextResponse.json({ error: 'No behavioral questions found', status: 'failed' }, { status: 500 });
+      }
+
+      console.log(`Generating behavioral answers for ${questions.behavioral.length} questions...`);
       return generateAnswersForCategory(
         questions.behavioral,
         [],
