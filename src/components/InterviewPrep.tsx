@@ -307,78 +307,141 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
     );
   }
 
+  // Circular progress component
+  const CircularProgress = ({ percent, size = 40, strokeWidth = 4, isActive = false }: { percent: number; size?: number; strokeWidth?: number; isActive?: boolean }) => {
+    const radius = (size - strokeWidth) / 2;
+    const circumference = radius * 2 * Math.PI;
+    const offset = circumference - (percent / 100) * circumference;
+
+    return (
+      <div className="relative" style={{ width: size, height: size }}>
+        <svg className="transform -rotate-90" width={size} height={size}>
+          {/* Background circle */}
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke="#e5e7eb"
+            strokeWidth={strokeWidth}
+          />
+          {/* Progress circle */}
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke={percent >= 100 ? '#22c55e' : '#9333ea'}
+            strokeWidth={strokeWidth}
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+            className="transition-all duration-500 ease-out"
+          />
+        </svg>
+        {/* Center content */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          {percent >= 100 ? (
+            <svg className="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+            </svg>
+          ) : isActive ? (
+            <span className="text-xs font-semibold text-purple-700">{Math.round(percent)}%</span>
+          ) : (
+            <span className="text-xs text-gray-400">{Math.round(percent)}%</span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // Show progress UI when generating
   if (generating || (progressStatus && progressStatus !== 'completed' && progressStatus !== 'failed')) {
+    const overallPercent = (progressStep / 8) * 100;
+
     return (
       <Card>
         <CardContent className="py-12">
-          <div className="max-w-md mx-auto text-center">
-            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-purple-100">
-              <svg className="h-8 w-8 text-purple-600 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-              </svg>
+          <div className="max-w-lg mx-auto">
+            {/* Main circular progress */}
+            <div className="text-center mb-8">
+              <div className="relative inline-block">
+                <svg className="transform -rotate-90" width={120} height={120}>
+                  <circle
+                    cx={60}
+                    cy={60}
+                    r={52}
+                    fill="none"
+                    stroke="#e5e7eb"
+                    strokeWidth={8}
+                  />
+                  <circle
+                    cx={60}
+                    cy={60}
+                    r={52}
+                    fill="none"
+                    stroke="url(#gradient)"
+                    strokeWidth={8}
+                    strokeDasharray={326.73}
+                    strokeDashoffset={326.73 - (overallPercent / 100) * 326.73}
+                    strokeLinecap="round"
+                    className="transition-all duration-500 ease-out"
+                  />
+                  <defs>
+                    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <stop offset="0%" stopColor="#9333ea" />
+                      <stop offset="100%" stopColor="#6366f1" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-2xl font-bold text-gray-900">{Math.round(overallPercent)}%</span>
+                </div>
+              </div>
+
+              <h3 className="mt-4 text-lg font-semibold text-gray-900">
+                Generating Your Interview Prep
+              </h3>
+              <p className="mt-1 text-sm text-gray-500">
+                This typically takes {ESTIMATED_TIME}
+              </p>
             </div>
 
-            <h3 className="mb-2 text-lg font-semibold text-gray-900">
-              Generating Your Interview Prep
-            </h3>
-            <p className="mb-6 text-sm text-gray-500">
-              This typically takes {ESTIMATED_TIME}. You can stay on this page or come back later.
-            </p>
-
-            {/* Progress Steps */}
-            <div className="space-y-3 text-left">
+            {/* Step progress indicators - 2 rows of 4 */}
+            <div className="grid grid-cols-4 gap-x-3 gap-y-4 mb-6">
               {STEP_LABELS.slice(1).map((label, index) => {
                 const stepNum = index + 1;
                 const isActive = progressStep === stepNum;
                 const isComplete = progressStep > stepNum;
+                const stepPercent = isComplete ? 100 : isActive ? 50 : 0;
 
                 return (
-                  <div key={stepNum} className="flex items-center gap-3">
-                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-medium ${
+                  <div key={stepNum} className="flex flex-col items-center">
+                    <CircularProgress
+                      percent={stepPercent}
+                      size={36}
+                      strokeWidth={3}
+                      isActive={isActive}
+                    />
+                    <span className={`mt-1.5 text-[10px] text-center leading-tight max-w-[70px] ${
                       isComplete
-                        ? 'bg-green-100 text-green-700'
-                        : isActive
-                          ? 'bg-purple-100 text-purple-700'
-                          : 'bg-gray-100 text-gray-400'
-                    }`}>
-                      {isComplete ? (
-                        <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      ) : (
-                        stepNum
-                      )}
-                    </div>
-                    <span className={`text-sm ${
-                      isComplete
-                        ? 'text-green-700'
+                        ? 'text-green-600 font-medium'
                         : isActive
                           ? 'text-purple-700 font-medium'
                           : 'text-gray-400'
                     }`}>
-                      {label}
-                      {isActive && (
-                        <span className="inline-block ml-2">
-                          <span className="inline-block animate-pulse">...</span>
-                        </span>
-                      )}
+                      {label.replace('...', '').replace('Creating ', '').replace('Generating ', '').replace('Preparing ', '').replace('Analyzing ', '')}
                     </span>
                   </div>
                 );
               })}
             </div>
 
-            {/* Progress Bar */}
-            <div className="mt-6">
-              <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-purple-600 to-indigo-600 transition-all duration-500 ease-out"
-                  style={{ width: `${(progressStep / 8) * 100}%` }}
-                />
-              </div>
-              <p className="mt-2 text-xs text-gray-500">
-                Step {progressStep} of 8
+            {/* Current step indicator */}
+            <div className="text-center p-4 bg-purple-50 rounded-lg border border-purple-100">
+              <p className="text-sm text-purple-700">
+                <span className="font-medium">Step {progressStep} of 8:</span>{' '}
+                {STEP_LABELS[progressStep] || 'Processing...'}
               </p>
             </div>
           </div>

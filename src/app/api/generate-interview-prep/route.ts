@@ -266,6 +266,18 @@ ${context.resume.experiences.slice(0, 3).map(exp =>
 Key Requirements: ${job.parsed_requirements?.required_skills?.slice(0, 10).join(', ') || 'See job description'}
 `.trim();
 
+    // Map status to step number for database updates
+    const STATUS_STEP_MAP: Record<string, number> = {
+      'generating_context': 1,
+      'generating_questions': 2,
+      'generating_answers': 3,
+      'generating_answers_technical': 4,
+      'generating_answers_culture': 5,
+      'generating_answers_gap': 6,
+      'generating_answers_role': 7,
+      'generating_tips': 8,
+    };
+
     // Helper to generate answers for a single category
     const generateAnswersForCategory = async (
       categoryQuestions: InterviewQuestion[],
@@ -286,11 +298,14 @@ Key Requirements: ${job.parsed_requirements?.required_skills?.slice(0, 10).join(
         const newAnswers: InterviewAnswer[] = JSON.parse(extractJSON(answersResult.content));
         const allAnswers = [...existingAnswers, ...newAnswers];
 
+        const nextStep = STATUS_STEP_MAP[nextStatus] || 3;
+
         await supabase
           .from('interview_prep')
           .update({
             answers: allAnswers,
             status: nextStatus,
+            current_step: nextStep,
             updated_at: new Date().toISOString(),
           })
           .eq('job_id', jobId)
@@ -299,6 +314,7 @@ Key Requirements: ${job.parsed_requirements?.required_skills?.slice(0, 10).join(
         return NextResponse.json({
           success: true,
           status: nextStatus,
+          currentStep: nextStep,
           message: `${batchLabel} answers generated. Call again to continue.`
         });
       } catch (err) {
