@@ -31,13 +31,14 @@ export const SUBSCRIPTION_TIERS = {
   free: {
     name: 'Free',
     maxPages: 1,
-    features: ['1 Signal Page', 'Basic analytics', 'Standard themes'],
+    features: ['1 Signal Page', 'Cover letters & emails', 'Basic analytics', 'Standard themes'],
   },
   pro: {
     name: 'Pro',
     maxPages: Infinity,
     features: [
       'Unlimited Signal Pages',
+      'Cover letters & emails',
       'Advanced analytics',
       'All themes',
       'Priority support',

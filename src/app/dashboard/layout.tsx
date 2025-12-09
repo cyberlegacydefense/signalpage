@@ -34,7 +34,7 @@ export default async function DashboardLayout({
           {/* Desktop Navigation */}
           <div className="flex h-16 sm:h-20 items-center justify-between">
             <div className="flex items-center">
-              <Link href="/dashboard" className="flex-shrink-0">
+              <Link href="/" className="flex-shrink-0">
                 <Image
                   src="/signalpage-logo.png"
                   alt="SignalPage"

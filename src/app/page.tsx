@@ -159,8 +159,8 @@ export default function Home() {
                   description: 'Your most relevant achievements for this opportunity.',
                 },
                 {
-                  title: 'Case Studies',
-                  description: 'Relevant projects that demonstrate applicable skills.',
+                  title: 'Cover Letters & Emails',
+                  description: 'Generate tailored cover letters and interview follow-up emails.',
                 },
                 {
                   title: 'View Tracking',
@@ -199,8 +199,8 @@ export default function Home() {
                   description: 'Identify skill gaps and prepare responses to address them.',
                 },
                 {
-                  title: 'Cover Letters & Emails',
-                  description: 'Generate tailored cover letters and interview follow-up emails.',
+                  title: 'Strength Highlights',
+                  description: 'Know exactly which experiences to emphasize in your answers.',
                 },
                 {
                   title: 'Strategic Tips',

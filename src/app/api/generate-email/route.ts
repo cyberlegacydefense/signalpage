@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getLLMClient } from '@/lib/llm';
 import { buildGenerationContext } from '@/lib/llm/prompts';
-import { hasProAccess } from '@/lib/stripe';
 import type { GenerationContext } from '@/types';
 
 export const maxDuration = 60;
@@ -159,20 +158,6 @@ export async function POST(request: Request) {
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Check subscription tier - Pro only
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('subscription_tier')
-      .eq('id', user.id)
-      .single();
-
-    if (!hasProAccess(profile?.subscription_tier || 'free')) {
-      return NextResponse.json(
-        { error: 'Email generation requires a Pro subscription' },
-        { status: 403 }
-      );
     }
 
     const body: GenerateEmailRequest = await request.json();

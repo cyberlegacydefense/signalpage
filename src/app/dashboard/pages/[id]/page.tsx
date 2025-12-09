@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Button, Card, CardHeader, CardTitle, CardContent, Badge } from '@/components/ui';
 import { InterviewPrep } from '@/components/InterviewPrep';
 import { EmailGenerator } from '@/components/EmailGenerator';
-import { hasCoachAccess, hasProAccess } from '@/lib/stripe';
+import { hasCoachAccess } from '@/lib/stripe';
 import type {
   SignalPage,
   HeroSection,
@@ -712,11 +712,6 @@ export default function PageEditorPage({ params }: PageProps) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
             Emails
-            {!hasProAccess(subscriptionTier as 'free' | 'pro' | 'coach') && (
-              <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-                Pro
-              </span>
-            )}
           </button>
         </nav>
       </div>
@@ -733,7 +728,7 @@ export default function PageEditorPage({ params }: PageProps) {
       {activeTab === 'emails' && jobId && (
         <EmailGenerator
           jobId={jobId}
-          hasAccess={hasProAccess(subscriptionTier as 'free' | 'pro' | 'coach')}
+          hasAccess={true}
         />
       )}
 
