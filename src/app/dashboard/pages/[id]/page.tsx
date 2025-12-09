@@ -7,7 +7,8 @@ import { formatDistanceToNow, formatDistance } from 'date-fns';
 import { createClient } from '@/lib/supabase/client';
 import { Button, Card, CardHeader, CardTitle, CardContent, Badge } from '@/components/ui';
 import { InterviewPrep } from '@/components/InterviewPrep';
-import { hasCoachAccess } from '@/lib/stripe';
+import { EmailGenerator } from '@/components/EmailGenerator';
+import { hasCoachAccess, hasProAccess } from '@/lib/stripe';
 import type {
   SignalPage,
   HeroSection,
@@ -60,7 +61,7 @@ export default function PageEditorPage({ params }: PageProps) {
   const [editingCaseStudyIndex, setEditingCaseStudyIndex] = useState<number | null>(null);
   const [editingFitBulletIndex, setEditingFitBulletIndex] = useState<number | null>(null);
   const [editedCommentary, setEditedCommentary] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'content' | 'interview'>('content');
+  const [activeTab, setActiveTab] = useState<'content' | 'interview' | 'emails'>('content');
   const [subscriptionTier, setSubscriptionTier] = useState<string>('free');
   const [jobId, setJobId] = useState<string | null>(null);
 
@@ -696,6 +697,24 @@ export default function PageEditorPage({ params }: PageProps) {
               </span>
             )}
           </button>
+          <button
+            onClick={() => setActiveTab('emails')}
+            className={`flex items-center gap-2 pb-3 text-sm font-medium transition-colors ${
+              activeTab === 'emails'
+                ? 'border-b-2 border-green-600 text-green-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            Emails
+            {!hasProAccess(subscriptionTier as 'free' | 'pro' | 'coach') && (
+              <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                Pro
+              </span>
+            )}
+          </button>
         </nav>
       </div>
 
@@ -704,6 +723,14 @@ export default function PageEditorPage({ params }: PageProps) {
         <InterviewPrep
           jobId={jobId}
           hasAccess={hasCoachAccess(subscriptionTier as 'free' | 'pro' | 'coach')}
+        />
+      )}
+
+      {/* Emails Tab */}
+      {activeTab === 'emails' && jobId && (
+        <EmailGenerator
+          jobId={jobId}
+          hasAccess={hasProAccess(subscriptionTier as 'free' | 'pro' | 'coach')}
         />
       )}
 

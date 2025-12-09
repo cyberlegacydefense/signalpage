@@ -136,3 +136,8 @@ export function getTierFromPriceId(priceId: string): SubscriptionTier {
 export function hasCoachAccess(tier: SubscriptionTier): boolean {
   return tier === 'coach';
 }
+
+// Check if a tier has Pro features (pro or coach)
+export function hasProAccess(tier: SubscriptionTier): boolean {
+  return tier === 'pro' || tier === 'coach';
+}
