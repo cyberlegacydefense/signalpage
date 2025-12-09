@@ -299,6 +299,53 @@ export async function POST(request: Request) {
       });
     }
 
+    // Step 1: Generate Role Context (if we're resuming a stuck step 1)
+    if (currentStatus === 'generating_context') {
+      console.log(`[Interview Prep] Job ${jobId}: Step 1 (resume) - Generating role context...`);
+
+      const roleContextResult = await llm.complete({
+        messages: [
+          { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
+          { role: 'user', content: `${GENERATE_ROLE_CONTEXT_PROMPT}\n\n${contextStr}` },
+        ],
+        config: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', temperature: 0.7, maxTokens: 2000 },
+      });
+
+      const { data: roleContext, error: parseError } = safeParseJSON<RoleContextPackage>(
+        roleContextResult.content,
+        'role context'
+      );
+
+      if (parseError || !roleContext) {
+        await supabase
+          .from('interview_prep')
+          .update({ status: 'failed', error_message: parseError || 'Failed to parse role context' })
+          .eq('job_id', jobId)
+          .eq('user_id', user.id);
+        return NextResponse.json({ error: parseError, status: 'failed' }, { status: 500 });
+      }
+
+      console.log(`[Interview Prep] Job ${jobId}: Step 1 complete in ${Date.now() - startTime}ms`);
+
+      await supabase
+        .from('interview_prep')
+        .update({
+          role_context: roleContext,
+          status: 'generating_questions',
+          current_step: 2,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('job_id', jobId)
+        .eq('user_id', user.id);
+
+      return NextResponse.json({
+        success: true,
+        status: 'generating_questions',
+        currentStep: 2,
+        message: 'Role context generated. Call again to continue.'
+      });
+    }
+
     // Step 2: Generate Questions
     if (currentStatus === 'generating_questions') {
       console.log(`[Interview Prep] Job ${jobId}: Step 2 - Generating questions...`);
