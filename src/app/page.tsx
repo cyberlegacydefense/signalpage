@@ -329,28 +329,18 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-gray-200 bg-gray-50 px-4 py-12">
-        <div className="mx-auto max-w-6xl">
-          <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
-            <Image
-              src="/signalpage-logo.png"
-              alt="SignalPage"
-              width={822}
-              height={234}
-              className="h-10 w-auto"
-            />
-            <div className="flex items-center gap-6 text-sm">
-              <Link href="/faq" className="text-gray-600 hover:text-gray-900">
-                FAQ
-              </Link>
-              <Link href="/privacy" className="text-gray-600 hover:text-gray-900">
-                Privacy Policy
-              </Link>
+      <footer className="border-t border-gray-100 mt-auto">
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+          <div className="flex flex-col items-center justify-center gap-4">
+            <div className="flex items-center gap-3 text-sm text-gray-500">
+              <span>&copy; {new Date().getFullYear()} SignalPage</span>
+              <span className="text-gray-300">·</span>
+              <a href="mailto:info@signalpage.ai" className="hover:text-gray-700">Support</a>
+              <span className="text-gray-300">·</span>
+              <Link href="/privacy" className="hover:text-gray-700">Privacy</Link>
+              <span className="text-gray-300">·</span>
+              <Link href="/terms" className="hover:text-gray-700">Terms</Link>
             </div>
-          </div>
-          <div className="mt-8 border-t border-gray-200 pt-8 text-center text-sm text-gray-500">
-            <p>&copy; {new Date().getFullYear()} SignalPage. A product of Applied AI Ventures.</p>
-            <p className="mt-1">Stand out, don&apos;t blend in.</p>
           </div>
         </div>
       </footer>
