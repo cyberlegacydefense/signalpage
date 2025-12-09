@@ -293,14 +293,21 @@ Always output valid JSON as specified in the prompt.`
     // Get SignalPage URL if needed
     let signalPageUrl = '';
     if (includeSignalpageLink) {
+      // Get user's username for the URL
+      const { data: userProfileForUrl } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', user.id)
+        .single();
+
       const { data: signalPage } = await supabase
         .from('signal_pages')
         .select('slug')
         .eq('job_id', jobId)
         .maybeSingle();
 
-      if (signalPage?.slug) {
-        signalPageUrl = `https://signalpage.ai/p/${signalPage.slug}`;
+      if (signalPage?.slug && userProfileForUrl?.username) {
+        signalPageUrl = `https://signalpage.ai/${userProfileForUrl.username}/${signalPage.slug}`;
       }
     }
 
