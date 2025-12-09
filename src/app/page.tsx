@@ -2,50 +2,13 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui';
 import { FeatureShowcase } from '@/components/FeatureShowcase';
+import { PublicHeader } from '@/components/PublicHeader';
 
 export default function Home() {
   return (
     <div className="min-h-screen bg-white">
       {/* Navigation */}
-      <nav className="border-b border-gray-100">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 sm:h-20 items-center justify-between">
-            <Link href="/" className="flex-shrink-0">
-              <Image
-                src="/signalpage-logo.png"
-                alt="SignalPage"
-                width={822}
-                height={234}
-                className="h-8 sm:h-10 md:h-12 w-auto"
-                priority
-              />
-            </Link>
-            <div className="flex items-center gap-2 sm:gap-4">
-              <Link href="/faq" className="hidden sm:inline text-sm font-medium text-gray-900 hover:text-gray-600">
-                How It Works
-              </Link>
-              <Link href="/pricing" className="hidden sm:inline text-sm font-medium text-gray-900 hover:text-gray-600">
-                Pricing
-              </Link>
-              <Link href="/auth/login">
-                <Button variant="ghost" className="text-xs sm:text-sm px-2 sm:px-4">Sign in</Button>
-              </Link>
-              <Link href="/auth/signup">
-                <Button variant="primary" className="text-xs sm:text-sm px-2 sm:px-4">Get Started</Button>
-              </Link>
-            </div>
-          </div>
-          {/* Mobile links */}
-          <div className="flex sm:hidden justify-center gap-4 pb-3">
-            <Link href="/faq" className="text-sm font-medium text-gray-900 hover:text-gray-600">
-              How It Works
-            </Link>
-            <Link href="/pricing" className="text-sm font-medium text-gray-900 hover:text-gray-600">
-              Pricing
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <PublicHeader />
 
       {/* Hero */}
       <section className="px-4 py-20 sm:py-32">
@@ -236,8 +199,8 @@ export default function Home() {
                   description: 'Identify skill gaps and prepare responses to address them.',
                 },
                 {
-                  title: 'Strength Highlights',
-                  description: 'Know exactly which experiences to emphasize in your answers.',
+                  title: 'Cover Letters & Emails',
+                  description: 'Generate tailored cover letters and interview follow-up emails.',
                 },
                 {
                   title: 'Strategic Tips',
