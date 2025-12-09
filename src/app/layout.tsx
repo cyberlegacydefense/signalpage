@@ -20,6 +20,9 @@ export const metadata: Metadata = {
     description: "Create role-specific landing pages that prove you did your homework.",
     type: "website",
   },
+  verification: {
+    google: "vZcs-Ww74Krr9xi7NvSOjx8zfGjvxuImNU7xn6ZO1BM",
+  },
 };
 
 export default function RootLayout({
