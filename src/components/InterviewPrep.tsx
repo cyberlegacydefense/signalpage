@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
 import type {
   RoleContextPackage,
@@ -51,7 +51,7 @@ const CATEGORY_COLORS: Record<QuestionCategory, string> = {
   role_specific: 'bg-indigo-100 text-indigo-800',
 };
 
-const DIFFICULTY_COLORS = {
+const DIFFICULTY_COLORS: Record<string, string> = {
   easy: 'bg-green-100 text-green-700',
   medium: 'bg-yellow-100 text-yellow-700',
   hard: 'bg-red-100 text-red-700',
@@ -93,49 +93,140 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
   const [expandedQuestions, setExpandedQuestions] = useState<Set<string>>(new Set());
   const [progressStep, setProgressStep] = useState(0);
   const [progressStatus, setProgressStatus] = useState<string>('');
-  const [consecutiveErrors, setConsecutiveErrors] = useState(0);
   const [isStuck, setIsStuck] = useState(false);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const fetchPrep = useCallback(async () => {
+  // Cleanup interval on unmount
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, []);
+
+  const fetchPrep = useCallback(async (): Promise<PollResponse | null> => {
     try {
       const response = await fetch(`/api/generate-interview-prep?jobId=${jobId}`);
       const data: PollResponse = await response.json();
-
-      if (data.prep && data.status === 'completed') {
-        setPrep(data.prep);
-        setGenerating(false);
-        setProgressStep(0);
-        setProgressStatus('');
-        setIsStuck(false);
-      } else if (data.status === 'failed') {
-        setError(data.errorMessage || 'Generation failed. Please try again.');
-        setGenerating(false);
-        setProgressStep(0);
-        setProgressStatus('');
-        setIsStuck(false);
-      } else if (data.status && data.status !== 'not_started' && data.status !== 'completed') {
-        // In-progress status found - check if we're actively generating
-        const displayStep = STATUS_TO_STEP[data.status] || data.currentStep;
-        setProgressStep(displayStep);
-        setProgressStatus(data.status);
-
-        // If we're not actively generating but found in-progress status, it's stuck
-        if (!generating) {
-          setIsStuck(true);
-        }
-      } else {
-        // not_started or unknown - clear stuck state
-        setIsStuck(false);
-      }
-
       return data;
     } catch (err) {
       console.error('Failed to fetch interview prep:', err);
       return null;
     }
-  }, [jobId, generating]);
+  }, [jobId]);
 
-  const runGenerationStep = useCallback(async (forceReset = false): Promise<boolean> => {
+  // Check initial state on load
+  useEffect(() => {
+    if (!hasAccess) return;
+
+    const checkInitialState = async () => {
+      setLoading(true);
+      const data = await fetchPrep();
+      setLoading(false);
+
+      if (!data) return;
+
+      if (data.prep && data.status === 'completed') {
+        setPrep(data.prep);
+        setIsStuck(false);
+      } else if (data.status === 'failed') {
+        setError(data.errorMessage || 'Generation failed. Please try again.');
+        setIsStuck(false);
+      } else if (data.status && !['not_started', 'completed', 'failed'].includes(data.status)) {
+        // Found in-progress state - might be actively running or stuck
+        const displayStep = STATUS_TO_STEP[data.status] || data.currentStep;
+        setProgressStep(displayStep);
+        setProgressStatus(data.status);
+        // Assume it's actively running - start polling
+        setGenerating(true);
+      }
+    };
+
+    checkInitialState();
+  }, [jobId, hasAccess, fetchPrep]);
+
+  // Polling effect - uses GET to check status when generating
+  useEffect(() => {
+    if (!generating) {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+      return;
+    }
+
+    let consecutiveErrors = 0;
+
+    const poll = async () => {
+      const data = await fetchPrep();
+
+      if (!data) {
+        consecutiveErrors++;
+        if (consecutiveErrors >= 5) {
+          setError('Lost connection. Please refresh and try again.');
+          setGenerating(false);
+        }
+        return;
+      }
+
+      consecutiveErrors = 0;
+
+      // Update progress display
+      if (data.status && STATUS_TO_STEP[data.status]) {
+        setProgressStep(STATUS_TO_STEP[data.status]);
+        setProgressStatus(data.status);
+      } else if (data.currentStep) {
+        setProgressStep(data.currentStep);
+      }
+
+      // Check for completion
+      if (data.status === 'completed' && data.prep) {
+        setPrep(data.prep);
+        setGenerating(false);
+        setProgressStep(0);
+        setProgressStatus('');
+        setIsStuck(false);
+        return;
+      }
+
+      // Check for failure
+      if (data.status === 'failed') {
+        setError(data.errorMessage || 'Generation failed. Please try again.');
+        setGenerating(false);
+        setProgressStep(0);
+        setProgressStatus('');
+        setIsStuck(false);
+        return;
+      }
+
+      // Check if stuck (no update in 3 minutes)
+      // Note: We can't easily detect this on frontend without updated_at
+      // The backend handles stuck detection when user clicks generate again
+    };
+
+    // Initial poll immediately
+    poll();
+
+    // Then poll every 2 seconds
+    pollIntervalRef.current = setInterval(poll, 2000);
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, [generating, fetchPrep]);
+
+  const generatePrep = async (forceReset = false) => {
+    setGenerating(true);
+    setError(null);
+    setPrep(null);
+    setProgressStep(1);
+    setProgressStatus('generating_context');
+    setIsStuck(false);
+
     try {
       const response = await fetch('/api/generate-interview-prep', {
         method: 'POST',
@@ -146,109 +237,31 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to generate interview prep');
+        throw new Error(data.error || 'Failed to start interview prep generation');
       }
 
-      // Reset consecutive errors on success
-      setConsecutiveErrors(0);
-
-      // Update progress using status-to-step mapping for accurate display
+      // Update progress from response
       if (data.status) {
-        const displayStep = STATUS_TO_STEP[data.status] || data.currentStep;
+        const displayStep = STATUS_TO_STEP[data.status] || data.currentStep || 1;
         setProgressStep(displayStep);
         setProgressStatus(data.status);
-      } else if (data.currentStep) {
-        setProgressStep(data.currentStep);
       }
 
-      // If completed, we're done
+      // If already completed (shouldn't happen with forceReset, but handle it)
       if (data.status === 'completed' && data.prep) {
         setPrep(data.prep);
         setGenerating(false);
         setProgressStep(0);
         setProgressStatus('');
-        return true; // Done
       }
 
-      return false; // Not done, continue
+      // Otherwise, polling will handle the rest
     } catch (err) {
-      const newErrorCount = consecutiveErrors + 1;
-      setConsecutiveErrors(newErrorCount);
-
-      // Stop after 3 consecutive errors
-      if (newErrorCount >= 3) {
-        setError(err instanceof Error ? err.message : 'Generation failed after multiple attempts. Please try again.');
-        setGenerating(false);
-        setProgressStep(0);
-        setProgressStatus('');
-        return true; // Stop on repeated errors
-      }
-
-      // Allow retry for first few errors
-      console.warn(`Generation step error (attempt ${newErrorCount}/3):`, err);
-      return false; // Continue trying
+      setError(err instanceof Error ? err.message : 'Failed to start generation');
+      setGenerating(false);
+      setProgressStep(0);
+      setProgressStatus('');
     }
-  }, [jobId, consecutiveErrors]);
-
-  useEffect(() => {
-    if (hasAccess) {
-      setLoading(true);
-      fetchPrep().finally(() => setLoading(false));
-    }
-  }, [jobId, hasAccess, fetchPrep]);
-
-  // Polling effect - calls POST to continue generation steps
-  useEffect(() => {
-    if (!generating) return;
-
-    const continueGeneration = async () => {
-      // First check current status
-      const statusData = await fetchPrep();
-
-      if (statusData?.status === 'completed') {
-        setGenerating(false);
-        return true;
-      }
-
-      if (statusData?.status === 'failed') {
-        setError(statusData.errorMessage || 'Generation failed');
-        setGenerating(false);
-        return true;
-      }
-
-      // If still in progress, call POST to run next step
-      if (statusData?.status && !['not_started', 'completed', 'failed'].includes(statusData.status)) {
-        const done = await runGenerationStep();
-        return done;
-      }
-
-      return false;
-    };
-
-    const pollInterval = setInterval(async () => {
-      const done = await continueGeneration();
-      if (done) {
-        clearInterval(pollInterval);
-      }
-    }, 1500); // Check every 1.5 seconds
-
-    return () => clearInterval(pollInterval);
-  }, [generating, fetchPrep, runGenerationStep]);
-
-  const generatePrep = async (forceReset = false) => {
-    setGenerating(true);
-    setError(null);
-    setPrep(null); // Clear existing prep when regenerating
-    setProgressStep(1);
-    setProgressStatus('generating_context');
-    setConsecutiveErrors(0);
-    setIsStuck(false);
-
-    // Run first step with forceReset flag
-    const done = await runGenerationStep(forceReset);
-    if (done) return;
-
-    // The polling effect will handle subsequent steps
   };
 
   const resetPrep = async () => {
@@ -292,11 +305,11 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
   const getAllQuestions = (): InterviewQuestion[] => {
     if (!prep?.questions) return [];
     return [
-      ...prep.questions.behavioral,
-      ...prep.questions.technical,
-      ...prep.questions.culture_fit,
-      ...prep.questions.gap_probing,
-      ...prep.questions.role_specific,
+      ...(prep.questions.behavioral || []),
+      ...(prep.questions.technical || []),
+      ...(prep.questions.culture_fit || []),
+      ...(prep.questions.gap_probing || []),
+      ...(prep.questions.role_specific || []),
     ];
   };
 
@@ -709,10 +722,10 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
                         <div className="mb-2 flex flex-wrap items-center gap-2">
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CATEGORY_COLORS[question.category]}`}>
-                            {CATEGORY_LABELS[question.category]}
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CATEGORY_COLORS[question.category as QuestionCategory]}`}>
+                            {CATEGORY_LABELS[question.category as QuestionCategory]}
                           </span>
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${DIFFICULTY_COLORS[question.difficulty]}`}>
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${DIFFICULTY_COLORS[question.difficulty] || DIFFICULTY_COLORS.medium}`}>
                             {question.difficulty}
                           </span>
                         </div>
