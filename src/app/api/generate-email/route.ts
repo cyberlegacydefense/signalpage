@@ -310,24 +310,66 @@ Always output valid JSON as specified in the prompt.`
       finalBody += `\n\nP.S. I've created a personalized page highlighting my fit for this role: ${signalPageUrl}`;
     }
 
-    // Save to database (upsert based on unique constraint)
-    const { data: savedEmail, error: saveError } = await supabase
+    // Check if email already exists for this combination
+    let existingQuery = supabase
       .from('job_emails')
-      .upsert({
-        job_id: jobId,
-        user_id: user.id,
-        email_type: emailType,
-        interview_round: interviewRound || null,
-        interview_type: interviewType || null,
-        subject: emailContent.subject,
-        body: finalBody,
-        include_signalpage_link: includeSignalpageLink,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'job_id,user_id,email_type,interview_round,interview_type'
-      })
-      .select()
-      .single();
+      .select('id')
+      .eq('job_id', jobId)
+      .eq('user_id', user.id)
+      .eq('email_type', emailType);
+
+    // Handle NULL values properly in the query
+    if (interviewRound) {
+      existingQuery = existingQuery.eq('interview_round', interviewRound);
+    } else {
+      existingQuery = existingQuery.is('interview_round', null);
+    }
+
+    if (interviewType) {
+      existingQuery = existingQuery.eq('interview_type', interviewType);
+    } else {
+      existingQuery = existingQuery.is('interview_type', null);
+    }
+
+    const { data: existingEmail } = await existingQuery.maybeSingle();
+
+    let savedEmail;
+    let saveError;
+
+    if (existingEmail) {
+      // Update existing email
+      const { data, error } = await supabase
+        .from('job_emails')
+        .update({
+          subject: emailContent.subject,
+          body: finalBody,
+          include_signalpage_link: includeSignalpageLink,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingEmail.id)
+        .select()
+        .single();
+      savedEmail = data;
+      saveError = error;
+    } else {
+      // Insert new email
+      const { data, error } = await supabase
+        .from('job_emails')
+        .insert({
+          job_id: jobId,
+          user_id: user.id,
+          email_type: emailType,
+          interview_round: interviewRound || null,
+          interview_type: interviewType || null,
+          subject: emailContent.subject,
+          body: finalBody,
+          include_signalpage_link: includeSignalpageLink,
+        })
+        .select()
+        .single();
+      savedEmail = data;
+      saveError = error;
+    }
 
     if (saveError) {
       console.error('[Email Gen] Failed to save email:', saveError);
