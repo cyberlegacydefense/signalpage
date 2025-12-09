@@ -108,6 +108,18 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
   const fetchPrep = useCallback(async (): Promise<PollResponse | null> => {
     try {
       const response = await fetch(`/api/generate-interview-prep?jobId=${jobId}`);
+
+      // Handle auth errors gracefully - might be a temporary session issue
+      if (response.status === 401) {
+        console.warn('Auth issue during poll, will retry...');
+        return null;
+      }
+
+      if (!response.ok) {
+        console.error('Poll request failed:', response.status);
+        return null;
+      }
+
       const data: PollResponse = await response.json();
       return data;
     } catch (err) {
