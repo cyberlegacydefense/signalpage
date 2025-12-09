@@ -93,6 +93,7 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
   const [expandedQuestions, setExpandedQuestions] = useState<Set<string>>(new Set());
   const [progressStep, setProgressStep] = useState(0);
   const [progressStatus, setProgressStatus] = useState<string>('');
+  const [consecutiveErrors, setConsecutiveErrors] = useState(0);
 
   const fetchPrep = useCallback(async () => {
     try {
@@ -137,6 +138,9 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
         throw new Error(data.error || 'Failed to generate interview prep');
       }
 
+      // Reset consecutive errors on success
+      setConsecutiveErrors(0);
+
       // Update progress using status-to-step mapping for accurate display
       if (data.status) {
         const displayStep = STATUS_TO_STEP[data.status] || data.currentStep;
@@ -157,13 +161,23 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
 
       return false; // Not done, continue
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
-      setGenerating(false);
-      setProgressStep(0);
-      setProgressStatus('');
-      return true; // Stop on error
+      const newErrorCount = consecutiveErrors + 1;
+      setConsecutiveErrors(newErrorCount);
+
+      // Stop after 3 consecutive errors
+      if (newErrorCount >= 3) {
+        setError(err instanceof Error ? err.message : 'Generation failed after multiple attempts. Please try again.');
+        setGenerating(false);
+        setProgressStep(0);
+        setProgressStatus('');
+        return true; // Stop on repeated errors
+      }
+
+      // Allow retry for first few errors
+      console.warn(`Generation step error (attempt ${newErrorCount}/3):`, err);
+      return false; // Continue trying
     }
-  }, [jobId]);
+  }, [jobId, consecutiveErrors]);
 
   useEffect(() => {
     if (hasAccess) {
@@ -215,6 +229,7 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
     setError(null);
     setProgressStep(1);
     setProgressStatus('generating_context');
+    setConsecutiveErrors(0);
 
     // Run first step
     const done = await runGenerationStep();

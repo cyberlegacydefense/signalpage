@@ -170,14 +170,14 @@ export async function POST(request: Request) {
           error_message: null,
         }, { onConflict: 'job_id' });
 
-      // Step 1: Generate Role Context (using Claude)
+      // Step 1: Generate Role Context
       try {
         const roleContextResult = await llm.complete({
           messages: [
             { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
             { role: 'user', content: `${GENERATE_ROLE_CONTEXT_PROMPT}\n\n${contextStr}` },
           ],
-          config: { provider: 'anthropic', temperature: 0.7, maxTokens: 2000 },
+          config: { provider: 'openai', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2000 },
         });
 
         const roleContext: RoleContextPackage = JSON.parse(extractJSON(roleContextResult.content));
@@ -219,7 +219,7 @@ export async function POST(request: Request) {
             { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
             { role: 'user', content: `${GENERATE_INTERVIEW_QUESTIONS_PROMPT}\n\nRole Context:\n${JSON.stringify(roleContext, null, 2)}\n\n${contextStr}` },
           ],
-          config: { provider: 'anthropic', temperature: 0.8, maxTokens: 4000 },
+          config: { provider: 'openai', model: 'gpt-4o-mini', temperature: 0.8, maxTokens: 4000 },
         });
 
         const questions: InterviewQuestions = JSON.parse(extractJSON(questionsResult.content));
@@ -274,13 +274,13 @@ Key Requirements: ${job.parsed_requirements?.required_skills?.slice(0, 10).join(
       batchLabel: string
     ) => {
       try {
-        // Use Claude for faster, high-quality answer generation
+        // Use gpt-4o-mini for faster answer generation
         const answersResult = await llm.complete({
           messages: [
             { role: 'system', content: 'You are an expert interview coach. Generate concise, impactful interview answers using ONLY the candidate\'s real experience. Use STAR format. Be specific with metrics. Output valid JSON only - no markdown code blocks.' },
             { role: 'user', content: `${GENERATE_INTERVIEW_ANSWERS_PROMPT}\n\nQuestions:\n${JSON.stringify(categoryQuestions, null, 2)}\n\n${condensedContext}` },
           ],
-          config: { provider: 'anthropic', temperature: 0.7, maxTokens: 2000 },
+          config: { provider: 'openai', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2000 },
         });
 
         const newAnswers: InterviewAnswer[] = JSON.parse(extractJSON(answersResult.content));
@@ -380,7 +380,7 @@ Key Requirements: ${job.parsed_requirements?.required_skills?.slice(0, 10).join(
             { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
             { role: 'user', content: `${GENERATE_QUICK_TIPS_PROMPT}\n\nRole Context:\n${JSON.stringify(roleContext, null, 2)}\n\n${contextStr}` },
           ],
-          config: { provider: 'anthropic', temperature: 0.8, maxTokens: 1000 },
+          config: { provider: 'openai', model: 'gpt-4o-mini', temperature: 0.8, maxTokens: 1000 },
         });
 
         let quickTips: string[] = [];
@@ -430,8 +430,33 @@ Key Requirements: ${job.parsed_requirements?.required_skills?.slice(0, 10).join(
 
   } catch (error) {
     console.error('Interview prep generation error:', error);
+
+    // Try to get jobId and mark as failed
+    try {
+      const body = await request.clone().json();
+      if (body.jobId) {
+        const supabase = await createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase
+            .from('interview_prep')
+            .update({
+              status: 'failed',
+              error_message: error instanceof Error ? error.message : 'Generation failed unexpectedly'
+            })
+            .eq('job_id', body.jobId)
+            .eq('user_id', user.id);
+        }
+      }
+    } catch {
+      // Ignore errors in error handler
+    }
+
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to generate interview prep' },
+      {
+        error: error instanceof Error ? error.message : 'Failed to generate interview prep',
+        status: 'failed'
+      },
       { status: 500 }
     );
   }
