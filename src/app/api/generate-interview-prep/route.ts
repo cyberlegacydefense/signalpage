@@ -30,7 +30,54 @@ function extractJSON(content: string): string {
   return content.trim();
 }
 
+// Helper to safely parse JSON with detailed error reporting
+function safeParseJSON<T>(content: string, label: string): { data: T | null; error: string | null } {
+  try {
+    const extracted = extractJSON(content);
+    const parsed = JSON.parse(extracted) as T;
+    return { data: parsed, error: null };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : 'Unknown parse error';
+    console.error(`[Interview Prep] JSON parse error in ${label}:`, errorMsg);
+    console.error(`[Interview Prep] Raw content (first 500 chars):`, content.substring(0, 500));
+    return { data: null, error: `Failed to parse ${label}: ${errorMsg}` };
+  }
+}
+
+// Helper to validate questions structure
+function validateQuestions(questions: unknown): { valid: boolean; error: string | null } {
+  if (!questions || typeof questions !== 'object') {
+    return { valid: false, error: 'Questions is not an object' };
+  }
+
+  const q = questions as Record<string, unknown>;
+  const requiredCategories = ['behavioral', 'technical', 'culture_fit', 'gap_probing', 'role_specific'];
+  const missing: string[] = [];
+  const empty: string[] = [];
+
+  for (const cat of requiredCategories) {
+    if (!Array.isArray(q[cat])) {
+      missing.push(cat);
+    } else if ((q[cat] as unknown[]).length === 0) {
+      empty.push(cat);
+    }
+  }
+
+  if (missing.length > 0) {
+    return { valid: false, error: `Missing question categories: ${missing.join(', ')}` };
+  }
+
+  if (empty.length > 0) {
+    console.warn(`[Interview Prep] Empty question categories (will skip): ${empty.join(', ')}`);
+  }
+
+  return { valid: true, error: null };
+}
+
 export async function POST(request: Request) {
+  const startTime = Date.now();
+  let jobId: string | null = null;
+
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -53,11 +100,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const { jobId } = await request.json();
+    const body = await request.json();
+    jobId = body.jobId;
+    const forceReset = body.forceReset === true;
 
     if (!jobId) {
       return NextResponse.json({ error: 'Job ID is required' }, { status: 400 });
     }
+
+    console.log(`[Interview Prep] Job ${jobId}: Starting request (forceReset=${forceReset})`);
 
     // Check current status - if already in progress, continue from where we left off
     const { data: existingPrep } = await supabase
@@ -76,6 +127,7 @@ export async function POST(request: Request) {
       .single();
 
     if (jobError || !job) {
+      console.error(`[Interview Prep] Job ${jobId}: Job not found`, jobError);
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
@@ -134,7 +186,7 @@ export async function POST(request: Request) {
     const currentStep = existingPrep?.current_step || 0;
     const currentStatus = existingPrep?.status || 'not_started';
 
-    console.log(`[Interview Prep] Job ${jobId}: status=${currentStatus}, step=${currentStep}`);
+    console.log(`[Interview Prep] Job ${jobId}: Current state - status=${currentStatus}, step=${currentStep}`);
 
     // Valid in-progress statuses
     const validInProgressStatuses = [
@@ -153,11 +205,12 @@ export async function POST(request: Request) {
     const isStuck = lastUpdate && (Date.now() - lastUpdate.getTime() > 2 * 60 * 1000);
 
     if (isStuck && validInProgressStatuses.includes(currentStatus)) {
-      console.log(`[Interview Prep] Job ${jobId}: Detected stuck generation (last update: ${lastUpdate}), restarting...`);
+      console.log(`[Interview Prep] Job ${jobId}: Detected stuck generation (last update: ${lastUpdate?.toISOString()})`);
     }
 
-    // If completed, failed, not_started, unknown/legacy status, or stuck - start fresh
+    // If forceReset, completed, failed, not_started, unknown/legacy status, or stuck - start fresh
     const shouldStartFresh =
+      forceReset ||
       currentStatus === 'completed' ||
       currentStatus === 'failed' ||
       currentStatus === 'not_started' ||
@@ -165,10 +218,25 @@ export async function POST(request: Request) {
       isStuck;
 
     if (shouldStartFresh) {
+      const reason = forceReset ? 'forceReset' :
+                     currentStatus === 'completed' ? 'completed' :
+                     currentStatus === 'failed' ? 'failed' :
+                     isStuck ? 'stuck' : 'fresh start';
+      console.log(`[Interview Prep] Job ${jobId}: Starting fresh (reason: ${reason})`);
+
+      // Delete existing record and create fresh one
+      if (existingPrep) {
+        await supabase
+          .from('interview_prep')
+          .delete()
+          .eq('job_id', jobId)
+          .eq('user_id', user.id);
+      }
+
       // Initialize fresh record
-      await supabase
+      const { error: insertError } = await supabase
         .from('interview_prep')
-        .upsert({
+        .insert({
           job_id: jobId,
           user_id: user.id,
           status: 'generating_context',
@@ -179,87 +247,130 @@ export async function POST(request: Request) {
           answers: [],
           quick_tips: [],
           error_message: null,
-        }, { onConflict: 'job_id' });
+        });
+
+      if (insertError) {
+        console.error(`[Interview Prep] Job ${jobId}: Failed to create record`, insertError);
+        return NextResponse.json({ error: 'Failed to initialize interview prep' }, { status: 500 });
+      }
 
       // Step 1: Generate Role Context
-      try {
-        const roleContextResult = await llm.complete({
-          messages: [
-            { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
-            { role: 'user', content: `${GENERATE_ROLE_CONTEXT_PROMPT}\n\n${contextStr}` },
-          ],
-          config: { provider: 'openai', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2000 },
-        });
+      console.log(`[Interview Prep] Job ${jobId}: Step 1 - Generating role context...`);
+      const roleContextResult = await llm.complete({
+        messages: [
+          { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
+          { role: 'user', content: `${GENERATE_ROLE_CONTEXT_PROMPT}\n\n${contextStr}` },
+        ],
+        config: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', temperature: 0.7, maxTokens: 2000 },
+      });
 
-        const roleContext: RoleContextPackage = JSON.parse(extractJSON(roleContextResult.content));
+      const { data: roleContext, error: parseError } = safeParseJSON<RoleContextPackage>(
+        roleContextResult.content,
+        'role context'
+      );
 
+      if (parseError || !roleContext) {
         await supabase
           .from('interview_prep')
-          .update({
-            role_context: roleContext,
-            status: 'generating_questions',
-            current_step: 2,
-            updated_at: new Date().toISOString(),
-          })
+          .update({ status: 'failed', error_message: parseError || 'Failed to parse role context' })
           .eq('job_id', jobId)
           .eq('user_id', user.id);
-
-        return NextResponse.json({
-          success: true,
-          status: 'generating_questions',
-          currentStep: 2,
-          message: 'Role context generated. Call again to continue.'
-        });
-      } catch (err) {
-        await supabase
-          .from('interview_prep')
-          .update({ status: 'failed', error_message: 'Failed to generate role context' })
-          .eq('job_id', jobId)
-          .eq('user_id', user.id);
-        throw err;
+        return NextResponse.json({ error: parseError, status: 'failed' }, { status: 500 });
       }
+
+      console.log(`[Interview Prep] Job ${jobId}: Step 1 complete in ${Date.now() - startTime}ms`);
+
+      await supabase
+        .from('interview_prep')
+        .update({
+          role_context: roleContext,
+          status: 'generating_questions',
+          current_step: 2,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('job_id', jobId)
+        .eq('user_id', user.id);
+
+      return NextResponse.json({
+        success: true,
+        status: 'generating_questions',
+        currentStep: 2,
+        message: 'Role context generated. Call again to continue.'
+      });
     }
 
     // Step 2: Generate Questions
-    if (currentStep === 2 || currentStatus === 'generating_questions') {
+    if (currentStatus === 'generating_questions') {
+      console.log(`[Interview Prep] Job ${jobId}: Step 2 - Generating questions...`);
       const roleContext = existingPrep?.role_context as RoleContextPackage;
 
-      try {
-        const questionsResult = await llm.complete({
-          messages: [
-            { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
-            { role: 'user', content: `${GENERATE_INTERVIEW_QUESTIONS_PROMPT}\n\nRole Context:\n${JSON.stringify(roleContext, null, 2)}\n\n${contextStr}` },
-          ],
-          config: { provider: 'openai', model: 'gpt-4o-mini', temperature: 0.8, maxTokens: 4000 },
-        });
-
-        const questions: InterviewQuestions = JSON.parse(extractJSON(questionsResult.content));
-
+      if (!roleContext || Object.keys(roleContext).length === 0) {
+        console.error(`[Interview Prep] Job ${jobId}: No role context found, resetting...`);
         await supabase
           .from('interview_prep')
-          .update({
-            questions,
-            status: 'generating_answers',
-            current_step: 3,
-            updated_at: new Date().toISOString(),
-          })
+          .update({ status: 'failed', error_message: 'Missing role context - please restart' })
           .eq('job_id', jobId)
           .eq('user_id', user.id);
-
-        return NextResponse.json({
-          success: true,
-          status: 'generating_answers',
-          currentStep: 3,
-          message: 'Questions generated. Call again to continue.'
-        });
-      } catch (err) {
-        await supabase
-          .from('interview_prep')
-          .update({ status: 'failed', error_message: 'Failed to generate questions' })
-          .eq('job_id', jobId)
-          .eq('user_id', user.id);
-        throw err;
+        return NextResponse.json({ error: 'Missing role context', status: 'failed' }, { status: 500 });
       }
+
+      const questionsResult = await llm.complete({
+        messages: [
+          { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
+          { role: 'user', content: `${GENERATE_INTERVIEW_QUESTIONS_PROMPT}\n\nRole Context:\n${JSON.stringify(roleContext, null, 2)}\n\n${contextStr}` },
+        ],
+        config: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', temperature: 0.8, maxTokens: 4000 },
+      });
+
+      const { data: questions, error: parseError } = safeParseJSON<InterviewQuestions>(
+        questionsResult.content,
+        'questions'
+      );
+
+      if (parseError || !questions) {
+        await supabase
+          .from('interview_prep')
+          .update({ status: 'failed', error_message: parseError || 'Failed to parse questions' })
+          .eq('job_id', jobId)
+          .eq('user_id', user.id);
+        return NextResponse.json({ error: parseError, status: 'failed' }, { status: 500 });
+      }
+
+      // Validate questions structure
+      const validation = validateQuestions(questions);
+      if (!validation.valid) {
+        console.error(`[Interview Prep] Job ${jobId}: Invalid questions structure:`, validation.error);
+        await supabase
+          .from('interview_prep')
+          .update({ status: 'failed', error_message: validation.error })
+          .eq('job_id', jobId)
+          .eq('user_id', user.id);
+        return NextResponse.json({ error: validation.error, status: 'failed' }, { status: 500 });
+      }
+
+      console.log(`[Interview Prep] Job ${jobId}: Step 2 complete - Generated ${
+        questions.behavioral.length + questions.technical.length +
+        questions.culture_fit.length + questions.gap_probing.length +
+        questions.role_specific.length
+      } questions in ${Date.now() - startTime}ms`);
+
+      await supabase
+        .from('interview_prep')
+        .update({
+          questions,
+          status: 'generating_answers',
+          current_step: 3,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('job_id', jobId)
+        .eq('user_id', user.id);
+
+      return NextResponse.json({
+        success: true,
+        status: 'generating_answers',
+        currentStep: 3,
+        message: 'Questions generated. Call again to continue.'
+      });
     }
 
     // Build a condensed context for answer generation (smaller prompt = faster)
@@ -291,36 +402,21 @@ Key Requirements: ${job.parsed_requirements?.required_skills?.slice(0, 10).join(
 
     // Helper to generate answers for a single category
     const generateAnswersForCategory = async (
-      categoryQuestions: InterviewQuestion[],
+      categoryQuestions: InterviewQuestion[] | undefined,
       existingAnswers: InterviewAnswer[],
       nextStatus: string,
       batchLabel: string
     ) => {
-      const startTime = Date.now();
-      console.log(`[${batchLabel}] Starting answer generation for ${categoryQuestions.length} questions...`);
+      const stepStartTime = Date.now();
 
-      try {
-        // Use gpt-4o-mini for faster answer generation
-        const answersResult = await llm.complete({
-          messages: [
-            { role: 'system', content: 'You are an expert interview coach. Generate concise, impactful interview answers using ONLY the candidate\'s real experience. Use STAR format. Be specific with metrics. Output valid JSON only - no markdown code blocks.' },
-            { role: 'user', content: `${GENERATE_INTERVIEW_ANSWERS_PROMPT}\n\nQuestions:\n${JSON.stringify(categoryQuestions, null, 2)}\n\n${condensedContext}` },
-          ],
-          config: { provider: 'openai', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2000 },
-        });
-
-        console.log(`[${batchLabel}] LLM completed in ${Date.now() - startTime}ms`);
-
-        const newAnswers: InterviewAnswer[] = JSON.parse(extractJSON(answersResult.content));
-        console.log(`[${batchLabel}] Parsed ${newAnswers.length} answers`);
-
-        const allAnswers = [...existingAnswers, ...newAnswers];
+      // Handle empty or missing category
+      if (!categoryQuestions || categoryQuestions.length === 0) {
+        console.log(`[Interview Prep] Job ${jobId}: Skipping ${batchLabel} (no questions)`);
         const nextStep = STATUS_STEP_MAP[nextStatus] || 3;
 
         await supabase
           .from('interview_prep')
           .update({
-            answers: allAnswers,
             status: nextStatus,
             current_step: nextStep,
             updated_at: new Date().toISOString(),
@@ -328,41 +424,76 @@ Key Requirements: ${job.parsed_requirements?.required_skills?.slice(0, 10).join(
           .eq('job_id', jobId)
           .eq('user_id', user.id);
 
-        console.log(`[${batchLabel}] Updated DB, moving to ${nextStatus} (step ${nextStep})`);
-
         return NextResponse.json({
           success: true,
           status: nextStatus,
           currentStep: nextStep,
-          message: `${batchLabel} answers generated. Call again to continue.`
+          message: `${batchLabel} skipped (no questions). Call again to continue.`
         });
-      } catch (err) {
-        console.error(`[${batchLabel}] Error after ${Date.now() - startTime}ms:`, err);
+      }
+
+      console.log(`[Interview Prep] Job ${jobId}: Generating ${batchLabel} answers for ${categoryQuestions.length} questions...`);
+
+      const answersResult = await llm.complete({
+        messages: [
+          { role: 'system', content: 'You are an expert interview coach. Generate concise, impactful interview answers using ONLY the candidate\'s real experience. Use STAR format. Be specific with metrics. Output valid JSON only - no markdown code blocks.' },
+          { role: 'user', content: `${GENERATE_INTERVIEW_ANSWERS_PROMPT}\n\nQuestions:\n${JSON.stringify(categoryQuestions, null, 2)}\n\n${condensedContext}` },
+        ],
+        config: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', temperature: 0.7, maxTokens: 2000 },
+      });
+
+      const { data: newAnswers, error: parseError } = safeParseJSON<InterviewAnswer[]>(
+        answersResult.content,
+        `${batchLabel} answers`
+      );
+
+      if (parseError || !newAnswers) {
         await supabase
           .from('interview_prep')
-          .update({ status: 'failed', error_message: `Failed to generate ${batchLabel} answers: ${err instanceof Error ? err.message : 'Unknown error'}` })
+          .update({ status: 'failed', error_message: parseError || `Failed to parse ${batchLabel} answers` })
           .eq('job_id', jobId)
           .eq('user_id', user.id);
-        throw err;
+        return NextResponse.json({ error: parseError, status: 'failed' }, { status: 500 });
       }
+
+      console.log(`[Interview Prep] Job ${jobId}: ${batchLabel} complete - ${newAnswers.length} answers in ${Date.now() - stepStartTime}ms`);
+
+      const allAnswers = [...existingAnswers, ...newAnswers];
+      const nextStep = STATUS_STEP_MAP[nextStatus] || 3;
+
+      await supabase
+        .from('interview_prep')
+        .update({
+          answers: allAnswers,
+          status: nextStatus,
+          current_step: nextStep,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('job_id', jobId)
+        .eq('user_id', user.id);
+
+      return NextResponse.json({
+        success: true,
+        status: nextStatus,
+        currentStep: nextStep,
+        message: `${batchLabel} answers generated. Call again to continue.`
+      });
     };
 
     // Step 3a: Generate Behavioral Answers
-    if (currentStep === 3 || currentStatus === 'generating_answers') {
+    if (currentStatus === 'generating_answers') {
       const questions = existingPrep?.questions as InterviewQuestions;
 
-      // Validate questions exist
-      if (!questions?.behavioral?.length) {
-        console.error('No behavioral questions found:', questions);
+      if (!questions || Object.keys(questions).length === 0) {
+        console.error(`[Interview Prep] Job ${jobId}: No questions found at step 3`);
         await supabase
           .from('interview_prep')
-          .update({ status: 'failed', error_message: 'No behavioral questions generated' })
+          .update({ status: 'failed', error_message: 'No questions found - please restart' })
           .eq('job_id', jobId)
           .eq('user_id', user.id);
-        return NextResponse.json({ error: 'No behavioral questions found', status: 'failed' }, { status: 500 });
+        return NextResponse.json({ error: 'No questions found', status: 'failed' }, { status: 500 });
       }
 
-      console.log(`Generating behavioral answers for ${questions.behavioral.length} questions...`);
       return generateAnswersForCategory(
         questions.behavioral,
         [],
@@ -371,119 +502,117 @@ Key Requirements: ${job.parsed_requirements?.required_skills?.slice(0, 10).join(
       );
     }
 
-    // Step 3b: Generate Technical Answers
+    // Step 4: Generate Technical Answers
     if (currentStatus === 'generating_answers_technical') {
       const questions = existingPrep?.questions as InterviewQuestions;
       const existingAnswers = (existingPrep?.answers || []) as InterviewAnswer[];
       return generateAnswersForCategory(
-        questions.technical,
+        questions?.technical,
         existingAnswers,
         'generating_answers_culture',
         'Technical'
       );
     }
 
-    // Step 3c: Generate Culture Fit Answers
+    // Step 5: Generate Culture Fit Answers
     if (currentStatus === 'generating_answers_culture') {
       const questions = existingPrep?.questions as InterviewQuestions;
       const existingAnswers = (existingPrep?.answers || []) as InterviewAnswer[];
       return generateAnswersForCategory(
-        questions.culture_fit,
+        questions?.culture_fit,
         existingAnswers,
         'generating_answers_gap',
         'Culture fit'
       );
     }
 
-    // Step 3d: Generate Gap Probing Answers
+    // Step 6: Generate Gap Probing Answers
     if (currentStatus === 'generating_answers_gap') {
       const questions = existingPrep?.questions as InterviewQuestions;
       const existingAnswers = (existingPrep?.answers || []) as InterviewAnswer[];
       return generateAnswersForCategory(
-        questions.gap_probing,
+        questions?.gap_probing,
         existingAnswers,
         'generating_answers_role',
         'Gap probing'
       );
     }
 
-    // Step 3e: Generate Role Specific Answers
+    // Step 7: Generate Role Specific Answers
     if (currentStatus === 'generating_answers_role') {
       const questions = existingPrep?.questions as InterviewQuestions;
       const existingAnswers = (existingPrep?.answers || []) as InterviewAnswer[];
       return generateAnswersForCategory(
-        questions.role_specific,
+        questions?.role_specific,
         existingAnswers,
         'generating_tips',
         'Role specific'
       );
     }
 
-    // Step 4: Generate Tips
-    if (currentStep === 4 || currentStatus === 'generating_tips') {
+    // Step 8: Generate Tips
+    if (currentStatus === 'generating_tips') {
+      console.log(`[Interview Prep] Job ${jobId}: Step 8 - Generating tips...`);
       const roleContext = existingPrep?.role_context as RoleContextPackage;
 
-      try {
-        const tipsResult = await llm.complete({
-          messages: [
-            { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
-            { role: 'user', content: `${GENERATE_QUICK_TIPS_PROMPT}\n\nRole Context:\n${JSON.stringify(roleContext, null, 2)}\n\n${contextStr}` },
-          ],
-          config: { provider: 'openai', model: 'gpt-4o-mini', temperature: 0.8, maxTokens: 1000 },
-        });
+      const tipsResult = await llm.complete({
+        messages: [
+          { role: 'system', content: INTERVIEW_COACH_SYSTEM_PROMPT },
+          { role: 'user', content: `${GENERATE_QUICK_TIPS_PROMPT}\n\nRole Context:\n${JSON.stringify(roleContext, null, 2)}\n\n${contextStr}` },
+        ],
+        config: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', temperature: 0.8, maxTokens: 1000 },
+      });
 
-        let quickTips: string[] = [];
-        try {
-          quickTips = JSON.parse(extractJSON(tipsResult.content));
-        } catch {
-          quickTips = [];
-        }
-
-        const { data: finalPrep } = await supabase
-          .from('interview_prep')
-          .update({
-            quick_tips: quickTips,
-            status: 'completed',
-            current_step: 4,
-            generated_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            error_message: null,
-          })
-          .eq('job_id', jobId)
-          .eq('user_id', user.id)
-          .select()
-          .single();
-
-        return NextResponse.json({
-          success: true,
-          status: 'completed',
-          currentStep: 4,
-          prep: finalPrep
-        });
-      } catch (err) {
-        await supabase
-          .from('interview_prep')
-          .update({ status: 'failed', error_message: 'Failed to generate tips' })
-          .eq('job_id', jobId)
-          .eq('user_id', user.id);
-        throw err;
+      let quickTips: string[] = [];
+      const { data: parsedTips } = safeParseJSON<string[]>(tipsResult.content, 'tips');
+      if (parsedTips && Array.isArray(parsedTips)) {
+        quickTips = parsedTips;
       }
+
+      console.log(`[Interview Prep] Job ${jobId}: Complete! Total time: ${Date.now() - startTime}ms`);
+
+      const { data: finalPrep } = await supabase
+        .from('interview_prep')
+        .update({
+          quick_tips: quickTips,
+          status: 'completed',
+          current_step: 9,
+          generated_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          error_message: null,
+        })
+        .eq('job_id', jobId)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+
+      return NextResponse.json({
+        success: true,
+        status: 'completed',
+        currentStep: 9,
+        prep: finalPrep
+      });
     }
 
-    // Shouldn't reach here, but return current status
+    // Shouldn't reach here - unknown status
+    console.error(`[Interview Prep] Job ${jobId}: Unknown status "${currentStatus}", resetting...`);
+    await supabase
+      .from('interview_prep')
+      .update({ status: 'failed', error_message: `Unknown status: ${currentStatus}` })
+      .eq('job_id', jobId)
+      .eq('user_id', user.id);
+
     return NextResponse.json({
-      success: true,
-      status: currentStatus,
-      currentStep: currentStep
-    });
+      error: `Unknown status: ${currentStatus}`,
+      status: 'failed'
+    }, { status: 500 });
 
   } catch (error) {
-    console.error('Interview prep generation error:', error);
+    console.error(`[Interview Prep] Job ${jobId || 'unknown'}: Error after ${Date.now() - startTime}ms:`, error);
 
-    // Try to get jobId and mark as failed
-    try {
-      const body = await request.clone().json();
-      if (body.jobId) {
+    // Try to mark as failed in database
+    if (jobId) {
+      try {
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
@@ -493,12 +622,12 @@ Key Requirements: ${job.parsed_requirements?.required_skills?.slice(0, 10).join(
               status: 'failed',
               error_message: error instanceof Error ? error.message : 'Generation failed unexpectedly'
             })
-            .eq('job_id', body.jobId)
+            .eq('job_id', jobId)
             .eq('user_id', user.id);
         }
+      } catch {
+        // Ignore errors in error handler
       }
-    } catch {
-      // Ignore errors in error handler
     }
 
     return NextResponse.json(
@@ -506,6 +635,51 @@ Key Requirements: ${job.parsed_requirements?.required_skills?.slice(0, 10).join(
         error: error instanceof Error ? error.message : 'Failed to generate interview prep',
         status: 'failed'
       },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE endpoint to reset interview prep
+export async function DELETE(request: Request) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const jobId = searchParams.get('jobId');
+
+    if (!jobId) {
+      return NextResponse.json({ error: 'Job ID is required' }, { status: 400 });
+    }
+
+    console.log(`[Interview Prep] Job ${jobId}: Deleting/resetting...`);
+
+    const { error } = await supabase
+      .from('interview_prep')
+      .delete()
+      .eq('job_id', jobId)
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.error(`[Interview Prep] Job ${jobId}: Delete failed`, error);
+      return NextResponse.json({ error: 'Failed to reset interview prep' }, { status: 500 });
+    }
+
+    console.log(`[Interview Prep] Job ${jobId}: Reset complete`);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Interview prep reset successfully'
+    });
+  } catch (error) {
+    console.error('Interview prep reset error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to reset interview prep' },
       { status: 500 }
     );
   }
@@ -544,7 +718,7 @@ export async function GET(request: Request) {
       prep,
       status: prep?.status || 'not_started',
       currentStep: prep?.current_step || 0,
-      totalSteps: prep?.total_steps || 4,
+      totalSteps: prep?.total_steps || 8,
       errorMessage: prep?.error_message,
     });
   } catch (error) {

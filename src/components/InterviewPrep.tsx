@@ -124,12 +124,12 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
     }
   }, [jobId]);
 
-  const runGenerationStep = useCallback(async (): Promise<boolean> => {
+  const runGenerationStep = useCallback(async (forceReset = false): Promise<boolean> => {
     try {
       const response = await fetch('/api/generate-interview-prep', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId }),
+        body: JSON.stringify({ jobId, forceReset }),
       });
 
       const data = await response.json();
@@ -224,18 +224,39 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
     return () => clearInterval(pollInterval);
   }, [generating, fetchPrep, runGenerationStep]);
 
-  const generatePrep = async () => {
+  const generatePrep = async (forceReset = false) => {
     setGenerating(true);
     setError(null);
+    setPrep(null); // Clear existing prep when regenerating
     setProgressStep(1);
     setProgressStatus('generating_context');
     setConsecutiveErrors(0);
 
-    // Run first step
-    const done = await runGenerationStep();
+    // Run first step with forceReset flag
+    const done = await runGenerationStep(forceReset);
     if (done) return;
 
     // The polling effect will handle subsequent steps
+  };
+
+  const resetPrep = async () => {
+    try {
+      const response = await fetch(`/api/generate-interview-prep?jobId=${jobId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to reset');
+      }
+
+      setPrep(null);
+      setError(null);
+      setProgressStep(0);
+      setProgressStatus('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset interview prep');
+    }
   };
 
   const toggleQuestion = (questionId: string) => {
@@ -475,7 +496,7 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
           )}
           <Button
             variant="primary"
-            onClick={generatePrep}
+            onClick={() => generatePrep(true)}
             isLoading={generating}
             disabled={generating}
             className="bg-gradient-to-r from-purple-600 to-indigo-600"
@@ -697,7 +718,7 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
       <div className="text-center">
         <Button
           variant="outline"
-          onClick={generatePrep}
+          onClick={() => generatePrep(true)}
           isLoading={generating}
           disabled={generating}
         >
