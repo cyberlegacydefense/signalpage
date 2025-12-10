@@ -109,19 +109,25 @@ export default function PageEditorPage({ params }: PageProps) {
       setJobId(data.job_id);
       setIsLoading(false);
 
-      // Load analytics
+      // Load analytics (excluding owner views)
       const { data: analyticsData } = await supabase
         .from('page_analytics')
-        .select('id, created_at')
+        .select('id, created_at, is_owner_view')
         .eq('page_id', pageId)
         .eq('event_type', 'page_view')
         .order('created_at', { ascending: true });
 
-      if (analyticsData && analyticsData.length > 0) {
+      // Filter out owner views
+      const filteredAnalytics = analyticsData?.filter(
+        (a: { is_owner_view: boolean | null }) =>
+          a.is_owner_view !== true && a.is_owner_view !== ('true' as unknown as boolean)
+      ) || [];
+
+      if (filteredAnalytics.length > 0) {
         setAnalytics({
-          views: analyticsData.length,
-          firstViewAt: analyticsData[0].created_at,
-          lastViewAt: analyticsData[analyticsData.length - 1].created_at,
+          views: filteredAnalytics.length,
+          firstViewAt: filteredAnalytics[0].created_at,
+          lastViewAt: filteredAnalytics[filteredAnalytics.length - 1].created_at,
           publishedAt: data.generated_at, // Use page generation time as proxy for publish time
         });
       } else {
