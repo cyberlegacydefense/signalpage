@@ -45,17 +45,22 @@ export default async function DashboardPage({
 
   if (pageIds.length > 0) {
     // Exclude owner views from analytics counts
-    // Use neq.true to exclude owner views (handles both false and null)
+    // is_owner_view can be true, false, or null
+    // We want to count rows where is_owner_view is false OR null (not true)
     const { data: analytics } = await supabase
       .from('page_analytics')
-      .select('page_id')
+      .select('page_id, is_owner_view')
       .in('page_id', pageIds)
-      .eq('event_type', 'page_view')
-      .neq('is_owner_view', true);
+      .eq('event_type', 'page_view');
 
     if (analytics) {
-      analytics.forEach((a: { page_id: string }) => {
-        viewCounts[a.page_id] = (viewCounts[a.page_id] || 0) + 1;
+      analytics.forEach((a: { page_id: string; is_owner_view: boolean | null }) => {
+        // Only count if is_owner_view is not true (i.e., false or null)
+        // Check both boolean true and string "true" in case of type coercion
+        const isOwner = a.is_owner_view === true || a.is_owner_view === 'true' as unknown as boolean;
+        if (!isOwner) {
+          viewCounts[a.page_id] = (viewCounts[a.page_id] || 0) + 1;
+        }
       });
     }
   }
