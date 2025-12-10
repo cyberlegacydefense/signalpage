@@ -144,6 +144,7 @@ export default async function SignalPage({ params }: PageProps) {
       event_type: 'page_view',
       referrer: null,
       user_agent: null,
+      is_owner_view: isOwner,
     }).then(({ error }) => {
       if (error) {
         console.error('Failed to record page view:', error);
