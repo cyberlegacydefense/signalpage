@@ -44,11 +44,13 @@ export default async function DashboardPage({
   const viewCounts: Record<string, number> = {};
 
   if (pageIds.length > 0) {
+    // Exclude owner views from analytics counts
     const { data: analytics } = await supabase
       .from('page_analytics')
       .select('page_id')
       .in('page_id', pageIds)
-      .eq('event_type', 'page_view');
+      .eq('event_type', 'page_view')
+      .or('is_owner_view.is.null,is_owner_view.eq.false');
 
     if (analytics) {
       analytics.forEach((a: { page_id: string }) => {

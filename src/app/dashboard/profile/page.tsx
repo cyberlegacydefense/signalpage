@@ -18,12 +18,26 @@ import {
 import type { User, Resume, ParsedResume } from '@/types';
 import { RESUME_TAGS } from '@/types';
 
+interface StripeDetails {
+  currentPeriodEnd: number;
+  cancelAtPeriodEnd: boolean;
+  billingPeriod: string;
+  price: number;
+  paymentMethod: {
+    brand: string;
+    last4: string;
+    expMonth: number;
+    expYear: number;
+  } | null;
+}
+
 interface SubscriptionInfo {
   tier: string;
   status: string;
   isFreeUser: boolean;
   maxPages: number;
   currentPageCount: number;
+  stripeDetails?: StripeDetails | null;
 }
 
 const MAX_RESUMES = 5;
@@ -704,6 +718,9 @@ export default function ProfilePage() {
                     {subscription.tier !== 'free' && !subscription.isFreeUser && (
                       <Badge variant="success">Active</Badge>
                     )}
+                    {subscription.stripeDetails?.cancelAtPeriodEnd && (
+                      <Badge variant="warning">Cancels Soon</Badge>
+                    )}
                   </div>
                   <p className="mt-1 text-sm text-gray-500">
                     {subscription.isFreeUser ? (
@@ -730,6 +747,68 @@ export default function ProfilePage() {
                   )}
                 </div>
               </div>
+
+              {/* Stripe Billing Details */}
+              {subscription.stripeDetails && (
+                <div className="grid gap-4 sm:grid-cols-3">
+                  {/* Next Billing Date */}
+                  <div className="p-4 rounded-lg border border-gray-200">
+                    <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                      {subscription.stripeDetails.cancelAtPeriodEnd ? 'Access Until' : 'Next Billing Date'}
+                    </div>
+                    <div className="mt-1 text-lg font-semibold text-gray-900">
+                      {new Date(subscription.stripeDetails.currentPeriodEnd * 1000).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Current Price */}
+                  <div className="p-4 rounded-lg border border-gray-200">
+                    <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                      Current Price
+                    </div>
+                    <div className="mt-1 text-lg font-semibold text-gray-900">
+                      ${subscription.stripeDetails.price}
+                      <span className="text-sm font-normal text-gray-500">
+                        /{subscription.stripeDetails.billingPeriod === 'quarterly' ? 'quarter' : 'month'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Payment Method */}
+                  <div className="p-4 rounded-lg border border-gray-200">
+                    <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                      Payment Method
+                    </div>
+                    {subscription.stripeDetails.paymentMethod ? (
+                      <div className="mt-1 text-lg font-semibold text-gray-900 capitalize">
+                        {subscription.stripeDetails.paymentMethod.brand} ****{subscription.stripeDetails.paymentMethod.last4}
+                      </div>
+                    ) : (
+                      <div className="mt-1 text-sm text-gray-500">Not available</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Cancellation Notice */}
+              {subscription.stripeDetails?.cancelAtPeriodEnd && (
+                <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+                  <h4 className="font-medium text-yellow-900">Subscription Ending</h4>
+                  <p className="mt-1 text-sm text-yellow-700">
+                    Your subscription will end on{' '}
+                    {new Date(subscription.stripeDetails.currentPeriodEnd * 1000).toLocaleDateString('en-US', {
+                      month: 'long',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}
+                    . Click &quot;Manage Billing&quot; to renew.
+                  </p>
+                </div>
+              )}
 
               {/* Upgrade CTA for free users */}
               {subscription.tier === 'free' && !subscription.isFreeUser && (

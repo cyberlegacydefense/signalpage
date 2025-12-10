@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
+import { createServiceClient, createClient } from '@/lib/supabase/server';
 import type { AnalyticsEventType } from '@/types';
 
 export async function POST(request: Request) {
@@ -33,6 +33,28 @@ export async function POST(request: Request) {
 
     const supabase = await createServiceClient();
 
+    // Check if the viewer is the page owner (only if logged in)
+    let isOwnerView = false;
+    try {
+      const authClient = await createClient();
+      const { data: { user } } = await authClient.auth.getUser();
+
+      if (user) {
+        // Check if this user owns the page
+        const { data: page } = await supabase
+          .from('signal_pages')
+          .select('user_id')
+          .eq('id', pageId)
+          .single();
+
+        if (page && page.user_id === user.id) {
+          isOwnerView = true;
+        }
+      }
+    } catch {
+      // If auth check fails, treat as non-owner view
+    }
+
     // Get request headers for analytics
     const userAgent = request.headers.get('user-agent');
     const referer = request.headers.get('referer');
@@ -44,6 +66,7 @@ export async function POST(request: Request) {
       referrer: referer,
       user_agent: userAgent,
       metadata,
+      is_owner_view: isOwnerView,
     });
 
     if (error) {
