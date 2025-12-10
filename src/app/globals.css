@@ -24,3 +24,28 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Fix for iOS Safari button text color issues */
+button,
+[type="button"],
+[type="submit"],
+[type="reset"] {
+  -webkit-text-fill-color: currentColor;
+}
+
+/* Ensure button text colors are not affected by dark mode */
+@media (prefers-color-scheme: dark) {
+  button.bg-blue-600,
+  button.bg-gray-900,
+  button.bg-red-600 {
+    -webkit-text-fill-color: white;
+    color: white;
+  }
+
+  button.bg-white,
+  button.bg-gray-100,
+  button.bg-gray-50 {
+    -webkit-text-fill-color: #111827;
+    color: #111827;
+  }
+}
