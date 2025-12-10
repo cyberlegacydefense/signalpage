@@ -44,7 +44,8 @@ export default function PageEditorPage({ params }: PageProps) {
   const [isRecalculatingScore, setIsRecalculatingScore] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [analytics, setAnalytics] = useState<{
-    views: number;
+    totalViews: number;
+    uniqueViews: number;
     firstViewAt: string | null;
     lastViewAt: string | null;
     publishedAt: string | null;
@@ -109,7 +110,7 @@ export default function PageEditorPage({ params }: PageProps) {
       setJobId(data.job_id);
       setIsLoading(false);
 
-      // Load analytics (excluding owner views)
+      // Load analytics
       const { data: analyticsData } = await supabase
         .from('page_analytics')
         .select('id, created_at, is_owner_view')
@@ -117,22 +118,25 @@ export default function PageEditorPage({ params }: PageProps) {
         .eq('event_type', 'page_view')
         .order('created_at', { ascending: true });
 
-      // Filter out owner views
-      const filteredAnalytics = analyticsData?.filter(
+      // Calculate total views (all) and unique views (non-owner)
+      const allViews = analyticsData || [];
+      const nonOwnerViews = allViews.filter(
         (a: { is_owner_view: boolean | null }) =>
           a.is_owner_view !== true && a.is_owner_view !== ('true' as unknown as boolean)
-      ) || [];
+      );
 
-      if (filteredAnalytics.length > 0) {
+      if (nonOwnerViews.length > 0) {
         setAnalytics({
-          views: filteredAnalytics.length,
-          firstViewAt: filteredAnalytics[0].created_at,
-          lastViewAt: filteredAnalytics[filteredAnalytics.length - 1].created_at,
+          totalViews: allViews.length,
+          uniqueViews: nonOwnerViews.length,
+          firstViewAt: nonOwnerViews[0].created_at,
+          lastViewAt: nonOwnerViews[nonOwnerViews.length - 1].created_at,
           publishedAt: data.generated_at, // Use page generation time as proxy for publish time
         });
       } else {
         setAnalytics({
-          views: 0,
+          totalViews: allViews.length,
+          uniqueViews: 0,
           firstViewAt: null,
           lastViewAt: null,
           publishedAt: data.generated_at,
@@ -1380,12 +1384,20 @@ export default function PageEditorPage({ params }: PageProps) {
               <p className="text-sm text-gray-500">
                 Publish your page to start tracking analytics.
               </p>
-            ) : analytics && analytics.views > 0 ? (
+            ) : analytics && (analytics.uniqueViews > 0 || analytics.totalViews > 0) ? (
               <div className="space-y-4">
-                {/* Total Views - Large */}
-                <div className="rounded-lg bg-gray-50 p-4 text-center">
-                  <p className="text-3xl font-bold text-gray-900">{analytics.views}</p>
-                  <p className="mt-1 text-sm text-gray-500">Total Views</p>
+                {/* Views - Two columns */}
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Unique Views (non-owner) */}
+                  <div className="rounded-lg bg-indigo-50 border border-indigo-200 p-4 text-center">
+                    <p className="text-3xl font-bold text-indigo-900">{analytics.uniqueViews}</p>
+                    <p className="mt-1 text-sm text-indigo-600">Unique Views</p>
+                  </div>
+                  {/* Total Views (including owner) */}
+                  <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 text-center">
+                    <p className="text-3xl font-bold text-gray-700">{analytics.totalViews}</p>
+                    <p className="mt-1 text-sm text-gray-500">Total Views</p>
+                  </div>
                 </div>
 
                 {/* Time to First View & Last Viewed */}
@@ -1422,7 +1434,7 @@ export default function PageEditorPage({ params }: PageProps) {
                 </div>
 
                 <p className="text-xs text-gray-400 text-center">
-                  Analytics update in real-time as visitors view your page
+                  Unique views exclude your own visits
                 </p>
               </div>
             ) : (
