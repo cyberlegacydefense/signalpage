@@ -333,3 +333,146 @@ export interface AnswerFeedback {
   improved_answer: string;
   follow_up_question: string;
 }
+
+// =============================================================================
+// Career Intelligence Types
+// =============================================================================
+
+// Career Narrative - User's evolving professional story
+export interface CareerNarrative {
+  id: string;
+  user_id: string;
+  core_identity: string | null;           // 1-2 sentence professional identity
+  career_throughline: string | null;      // Why past roles lead here
+  impact_emphasis: string | null;         // Business impact framing
+  leadership_signals: string | null;      // Leadership/ownership examples
+  version: number;
+  is_active: boolean;
+  source_job_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Career Asset Types
+export type CareerAssetType = 'star_story' | 'technical_explanation' | 'leadership_example' | 'failure_story';
+
+// Career Asset - Reusable interview-ready content
+export interface CareerAsset {
+  id: string;
+  user_id: string;
+  asset_type: CareerAssetType;
+  title: string;
+  content: string;
+  // STAR components (for star_story type)
+  situation?: string | null;
+  task?: string | null;
+  action?: string | null;
+  result?: string | null;
+  // Tagging
+  tags: string[];
+  // Source tracking
+  source_job_id?: string | null;
+  source_company?: string | null;
+  source_role?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Application Brain - Per-application analysis snapshot
+export interface ApplicationBrain {
+  id: string;
+  user_id: string;
+  job_id: string;
+  // Role analysis
+  role_seniority: string | null;
+  role_expectations: string | null;
+  skill_themes: string[];
+  // Cross-application insights
+  overlap_with_history: ApplicationOverlap | null;
+  // Interview preparation
+  interview_focus_areas: string[];
+  risk_areas: string[];
+  // Readiness assessment
+  strengths: string[];
+  gaps: string[];
+  recommendations: string[];
+  // Raw LLM output
+  raw_analysis: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface ApplicationOverlap {
+  similar_roles: string[];
+  recurring_themes: string[];
+  progression_narrative: string;
+}
+
+// User Career Settings
+export interface UserCareerSettings {
+  id: string;
+  user_id: string;
+  auto_generate_on_application: boolean;
+  auto_extract_from_resume: boolean;
+  notify_on_insights: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Career Asset Tag (predefined)
+export interface CareerAssetTag {
+  id: string;
+  tag_name: string;
+  tag_category: 'role_level' | 'skill_type' | 'context';
+  is_system: boolean;
+  created_at: string;
+}
+
+// Predefined tags constant
+export const CAREER_ASSET_TAGS = {
+  role_level: [
+    'IC',
+    'Manager',
+    'Director',
+    'Architect',
+    'Technical Lead',
+    'Staff Engineer',
+    'Principal',
+    'VP',
+    'C-Level',
+  ],
+  skill_type: [
+    'Technical',
+    'Non-technical',
+    'Data-driven',
+    'Process Improvement',
+    'Strategic',
+    'Tactical',
+  ],
+  context: [
+    'Cross-functional',
+    'Customer-facing',
+    'Team Building',
+    'Stakeholder Management',
+    'Crisis Management',
+    'Scaling',
+    'Turnaround',
+  ],
+} as const;
+
+// Career Intelligence Generation Context
+export interface CareerIntelligenceContext {
+  resume: ParsedResume;
+  job: Job;
+  user: Pick<User, 'full_name' | 'headline' | 'about_me'>;
+  signalPageContent?: Partial<SignalPage> | null;
+  interviewFeedback?: string | null;
+  applicationHistory?: ApplicationBrain[];
+}
+
+// Career Intelligence Generation Output
+export interface CareerIntelligenceOutput {
+  applicationBrain: Omit<ApplicationBrain, 'id' | 'user_id' | 'job_id' | 'created_at'>;
+  careerNarrative: Omit<CareerNarrative, 'id' | 'user_id' | 'version' | 'is_active' | 'source_job_id' | 'created_at' | 'updated_at'>;
+  careerAssets: Array<Omit<CareerAsset, 'id' | 'user_id' | 'is_active' | 'created_at' | 'updated_at'>>;
+}

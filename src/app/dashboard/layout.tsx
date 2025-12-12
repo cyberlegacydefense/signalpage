@@ -53,6 +53,12 @@ export default async function DashboardLayout({
                   My Pages
                 </Link>
                 <Link
+                  href="/dashboard/career"
+                  className="rounded-md px-2 md:px-3 py-2 text-sm font-medium text-gray-900 hover:bg-gray-100"
+                >
+                  Career Intel
+                </Link>
+                <Link
                   href="/dashboard/new"
                   className="rounded-md px-2 md:px-3 py-2 text-sm font-medium text-gray-900 hover:bg-gray-100"
                 >
@@ -88,6 +94,12 @@ export default async function DashboardLayout({
               My Pages
             </Link>
             <Link
+              href="/dashboard/career"
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-gray-900 hover:bg-gray-100"
+            >
+              Career
+            </Link>
+            <Link
               href="/dashboard/new"
               className="rounded-md px-3 py-1.5 text-sm font-medium text-gray-900 hover:bg-gray-100"
             >
@@ -98,12 +110,6 @@ export default async function DashboardLayout({
               className="rounded-md px-3 py-1.5 text-sm font-medium text-gray-900 hover:bg-gray-100"
             >
               Profile
-            </Link>
-            <Link
-              href="/pricing"
-              className="rounded-md px-3 py-1.5 text-sm font-medium text-gray-900 hover:bg-gray-100"
-            >
-              Pricing
             </Link>
           </div>
         </div>

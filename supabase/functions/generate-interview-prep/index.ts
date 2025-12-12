@@ -259,11 +259,52 @@ ${requirements ? `
 `.trim();
 }
 
+// Career Asset interface
+interface CareerAsset {
+  id: string;
+  asset_type: string;
+  title: string;
+  content: string;
+  situation?: string;
+  task?: string;
+  action?: string;
+  result?: string;
+  tags: string[];
+  source_company?: string;
+  source_role?: string;
+}
+
 // Build condensed context for answer generation
-function buildCondensedContext(job: Record<string, unknown>, resume: Record<string, unknown>, userProfile: Record<string, unknown> | null): string {
+function buildCondensedContext(
+  job: Record<string, unknown>,
+  resume: Record<string, unknown>,
+  userProfile: Record<string, unknown> | null,
+  careerAssets?: CareerAsset[]
+): string {
   const experiences = resume.experiences as Array<Record<string, unknown>> || [];
   const skills = resume.skills as string[] || [];
   const requirements = job.parsed_requirements as Record<string, unknown> | null;
+
+  // Build career assets context if available
+  let assetsContext = '';
+  if (careerAssets && careerAssets.length > 0) {
+    const assetsByType: Record<string, CareerAsset[]> = {};
+    careerAssets.forEach(asset => {
+      if (!assetsByType[asset.asset_type]) {
+        assetsByType[asset.asset_type] = [];
+      }
+      assetsByType[asset.asset_type].push(asset);
+    });
+
+    assetsContext = `
+## Pre-Prepared Career Stories (USE THESE for relevant questions):
+${Object.entries(assetsByType).map(([type, assets]) => `
+### ${type.replace('_', ' ').toUpperCase()}:
+${assets.map(a => `- **${a.title}** (${a.source_company || 'N/A'}): ${a.content}`).join('\n')}`).join('\n')}
+
+IMPORTANT: When a question matches one of these pre-prepared stories, USE THE STORY as the basis for your answer. These have been curated by the candidate.
+`;
+  }
 
   return `
 ## Candidate: ${userProfile?.full_name || 'Candidate'}
@@ -277,6 +318,7 @@ ${experiences.slice(0, 3).map(exp =>
 
 ## Target Role: ${job.role_title} at ${job.company_name}
 Key Requirements: ${(requirements?.required_skills as string[] || []).slice(0, 10).join(', ') || 'See job description'}
+${assetsContext}
 `.trim();
 }
 
@@ -388,8 +430,18 @@ Deno.serve(async (req) => {
       .eq('id', userId)
       .single();
 
+    // Get career assets from vault (if available)
+    const { data: careerAssets } = await supabase
+      .from('career_assets')
+      .select('id, asset_type, title, content, situation, task, action, result, tags, source_company, source_role')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .limit(20);
+
+    console.log(`[Interview Prep] Job ${jobId}: Found ${careerAssets?.length || 0} career assets`);
+
     const contextStr = buildContextString(job, resume.parsed_data, userProfile);
-    const condensedContext = buildCondensedContext(job, resume.parsed_data, userProfile);
+    const condensedContext = buildCondensedContext(job, resume.parsed_data, userProfile, careerAssets || undefined);
 
     // Step 1: Generate Role Context
     console.log(`[Interview Prep] Job ${jobId}: Step 1 - Generating role context...`);

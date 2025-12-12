@@ -244,7 +244,23 @@ export async function POST(request: Request) {
       hiringManagerName: job.hiring_manager_name,
     };
 
-    const contextStr = buildGenerationContext(context);
+    // Get career narrative for consistent messaging (if available)
+    const { data: careerNarrative } = await supabase
+      .from('career_narratives')
+      .select('core_identity, career_throughline')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    let contextStr = buildGenerationContext(context);
+
+    // Append career narrative if available
+    if (careerNarrative) {
+      contextStr += `\n\n## Career Narrative (use for consistent messaging)
+**Core Identity**: ${careerNarrative.core_identity || 'N/A'}
+**Career Throughline**: ${careerNarrative.career_throughline || 'N/A'}`;
+    }
+
     const emailPrompt = buildEmailPrompt(emailType, interviewRound, interviewType);
 
     // Generate email with LLM
