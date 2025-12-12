@@ -76,7 +76,13 @@ export default function Home() {
                   <svg className="mt-1 h-5 w-5 shrink-0 text-red-500" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                   </svg>
-                  You land interviews but don&apos;t know how to leverage your experience
+                  Every application starts from scratch — no learning compounds
+                </li>
+                <li className="flex items-start gap-2">
+                  <svg className="mt-1 h-5 w-5 shrink-0 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                  Your career story is scattered across documents and memory
                 </li>
               </ul>
             </div>
@@ -86,7 +92,7 @@ export default function Home() {
                 The Solution
               </div>
               <h3 className="mb-4 text-2xl font-bold text-gray-900">
-                One platform, complete preparation
+                One platform that learns with you
               </h3>
               <ul className="space-y-3 text-gray-600">
                 <li className="flex items-start gap-2">
@@ -99,19 +105,25 @@ export default function Home() {
                   <svg className="mt-1 h-5 w-5 shrink-0 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  AI interview questions tailored to the job + your resume
+                  AI interview prep tailored to the job + your resume
                 </li>
                 <li className="flex items-start gap-2">
                   <svg className="mt-1 h-5 w-5 shrink-0 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  Personalized answer scripts using your actual experience
+                  Career Asset Vault with reusable stories and talking points
                 </li>
                 <li className="flex items-start gap-2">
                   <svg className="mt-1 h-5 w-5 shrink-0 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  Gap analysis to address concerns before they ask
+                  Application insights that compound over your job search
+                </li>
+                <li className="flex items-start gap-2">
+                  <svg className="mt-1 h-5 w-5 shrink-0 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Consistent career narrative across all applications
                 </li>
               </ul>
             </div>
@@ -212,6 +224,50 @@ export default function Home() {
                 },
               ].map((feature, i) => (
                 <div key={i} className="rounded-xl bg-gray-800/50 border border-purple-500/20 p-5">
+                  <h4 className="mb-2 font-semibold">{feature.title}</h4>
+                  <p className="text-sm text-gray-400">{feature.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Career Intelligence Features */}
+          <div className="mt-12 pt-8 border-t border-gray-800">
+            <h3 className="text-xl font-semibold text-emerald-400 mb-6 flex items-center gap-2">
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              Career Intelligence
+              <span className="ml-2 text-xs bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full">Premium</span>
+            </h3>
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {[
+                {
+                  title: 'Career Narrative',
+                  description: 'Build a consistent professional story that evolves with each application.',
+                },
+                {
+                  title: 'Asset Vault',
+                  description: 'Store reusable STAR stories, technical explanations, and talking points.',
+                },
+                {
+                  title: 'Application Brain',
+                  description: 'AI-powered insights for each role — strengths, gaps, and focus areas.',
+                },
+                {
+                  title: 'Cross-Application Learning',
+                  description: 'Insights compound over time, making every application smarter.',
+                },
+                {
+                  title: 'Interview-Ready Stories',
+                  description: 'Pre-prepared answers automatically used in interview prep.',
+                },
+                {
+                  title: 'Consistent Messaging',
+                  description: 'Same professional identity across pages, emails, and interviews.',
+                },
+              ].map((feature, i) => (
+                <div key={i} className="rounded-xl bg-gray-800/50 border border-emerald-500/20 p-5">
                   <h4 className="mb-2 font-semibold">{feature.title}</h4>
                   <p className="text-sm text-gray-400">{feature.description}</p>
                 </div>
