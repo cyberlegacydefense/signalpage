@@ -538,6 +538,7 @@ function BrainTab({
   }, [snapshots]);
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showAllJobs, setShowAllJobs] = useState(false);
 
   const handleGenerate = async (jobId: string) => {
     setGeneratingJobId(jobId);
@@ -624,8 +625,8 @@ function BrainTab({
                   <strong>{jobs.length}</strong> page{jobs.length > 1 ? 's' : ''} without insights
                 </p>
               </div>
-              <div className="flex gap-2">
-                {jobs.slice(0, 2).map((job) => (
+              <div className="flex flex-wrap gap-2 items-center">
+                {(showAllJobs ? jobs : jobs.slice(0, 2)).map((job) => (
                   <Button
                     key={job.id}
                     variant="outline"
@@ -637,11 +638,29 @@ function BrainTab({
                     {generatingJobId === job.id ? 'Generating...' : `${job.company_name}`}
                   </Button>
                 ))}
-                {jobs.length > 2 && (
-                  <span className="text-xs text-amber-700 self-center">+{jobs.length - 2} more</span>
+                {jobs.length > 2 && !showAllJobs && (
+                  <button
+                    onClick={() => setShowAllJobs(true)}
+                    className="text-xs text-amber-700 hover:text-amber-900 underline cursor-pointer"
+                  >
+                    +{jobs.length - 2} more
+                  </button>
+                )}
+                {showAllJobs && jobs.length > 2 && (
+                  <button
+                    onClick={() => setShowAllJobs(false)}
+                    className="text-xs text-amber-700 hover:text-amber-900 underline cursor-pointer"
+                  >
+                    Show less
+                  </button>
                 )}
               </div>
             </div>
+            {errorMessage && (
+              <div className="mt-3 rounded-lg bg-red-50 border border-red-200 p-2 text-sm text-red-700">
+                {errorMessage}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
