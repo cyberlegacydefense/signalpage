@@ -3,7 +3,51 @@ import { createClient } from '@/lib/supabase/server';
 import { generateFullPage, parseJobDescription } from '@/lib/llm/generation-service';
 import { generateSlug } from '@/lib/utils/slug';
 import { calculateMatchScore } from '@/lib/utils/match-score';
+import { hasProAccess } from '@/lib/stripe';
 import type { GenerationContext, ParsedResume, Job, User } from '@/types';
+
+// Helper to trigger Career Intelligence generation in background
+async function triggerCareerIntelligence(
+  jobId: string,
+  userId: string,
+  subscriptionTier: string | null,
+  supabaseClient: Awaited<ReturnType<typeof createClient>>
+) {
+  // Only for Pro/Coach users
+  if (!hasProAccess((subscriptionTier || 'free') as 'pro' | 'coach' | 'free')) {
+    return;
+  }
+
+  try {
+    // Check user settings
+    const { data: settings } = await supabaseClient
+      .from('user_career_settings')
+      .select('auto_generate_on_application')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    // Default to true if no settings exist
+    const shouldAutoGenerate = settings?.auto_generate_on_application ?? true;
+
+    if (!shouldAutoGenerate) {
+      console.log(`[Career Intelligence] Skipping auto-generation (disabled) for job ${jobId}`);
+      return;
+    }
+
+    console.log(`[Career Intelligence] Triggering auto-generation for job ${jobId}`);
+
+    // Import and call the generation function directly (async, don't await)
+    import('@/lib/career-intelligence/generate').then(({ generateCareerIntelligence }) => {
+      generateCareerIntelligence(jobId, userId, supabaseClient).catch(err => {
+        console.error(`[Career Intelligence] Background generation failed:`, err);
+      });
+    }).catch(err => {
+      console.error(`[Career Intelligence] Failed to import generation module:`, err);
+    });
+  } catch (err) {
+    console.error(`[Career Intelligence] Error checking settings:`, err);
+  }
+}
 
 // Increase timeout for Netlify (max 26 seconds for hobby, 60 for pro)
 export const maxDuration = 60;
@@ -158,6 +202,9 @@ export async function POST(request: Request) {
           .update({ status: 'draft' })
           .eq('id', jobId);
 
+        // Trigger Career Intelligence in background (fire and forget)
+        triggerCareerIntelligence(jobId, user.id, profile.subscription_tier || 'free', supabase);
+
         return NextResponse.json({ page: retryPage });
       }
       throw pageError;
@@ -168,6 +215,9 @@ export async function POST(request: Request) {
       .from('jobs')
       .update({ status: 'draft' })
       .eq('id', jobId);
+
+    // Trigger Career Intelligence in background (fire and forget)
+    triggerCareerIntelligence(jobId, user.id, profile.subscription_tier || 'free', supabase);
 
     return NextResponse.json({ page });
   } catch (error) {
