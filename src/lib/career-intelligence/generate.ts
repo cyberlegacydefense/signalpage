@@ -119,7 +119,7 @@ export async function generateCareerIntelligence(
       { role: 'system', content: CAREER_INTELLIGENCE_SYSTEM_PROMPT },
       { role: 'user', content: `${CAREER_INTELLIGENCE_PROMPT}\n\n${contextStr}` },
     ],
-    config: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', temperature: 0.7, maxTokens: 4000 },
+    config: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', temperature: 0.5, maxTokens: 3000 },
   });
 
   // Parse response

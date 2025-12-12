@@ -137,15 +137,32 @@ export default function CareerIntelligencePage() {
   };
 
   const handleGenerateForJob = async (jobId: string) => {
-    const response = await fetch('/api/career-intelligence', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobId }),
-    });
+    let response: Response;
+    try {
+      response = await fetch('/api/career-intelligence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId }),
+      });
+    } catch (fetchError) {
+      throw new Error('Request timed out. The generation is taking longer than expected. Please try again.');
+    }
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to generate');
+      // Handle 504 timeout specifically
+      if (response.status === 504) {
+        throw new Error('Generation timed out. This can happen with complex job descriptions. Please try again.');
+      }
+
+      let errorMessage = 'Failed to generate';
+      try {
+        const error = await response.json();
+        errorMessage = error.error || errorMessage;
+      } catch {
+        // Response wasn't JSON (e.g., HTML error page)
+        errorMessage = `Server error (${response.status}). Please try again.`;
+      }
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
@@ -520,14 +537,18 @@ function BrainTab({
     loadJobsWithoutInsights();
   }, [snapshots]);
 
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   const handleGenerate = async (jobId: string) => {
     setGeneratingJobId(jobId);
+    setErrorMessage(null);
     try {
       await onGenerateForJob(jobId);
       // Remove from list after successful generation
       setJobs(prev => prev.filter(j => j.id !== jobId));
     } catch (error) {
       console.error('Failed to generate:', error);
+      setErrorMessage(error instanceof Error ? error.message : 'Generation timed out. Please try again.');
     }
     setGeneratingJobId(null);
   };
@@ -562,6 +583,11 @@ function BrainTab({
               </p>
             </div>
           </div>
+          {errorMessage && (
+            <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+              {errorMessage}
+            </div>
+          )}
           <div className="space-y-3">
             {jobs.map((job) => (
               <div key={job.id} className="flex items-center justify-between rounded-lg border p-4">
