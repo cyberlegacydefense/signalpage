@@ -20,12 +20,12 @@ export default function Home() {
             Now with AI Interview Coach
           </div>
           <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl md:text-6xl">
-            Land the interview.{' '}
-            <span className="text-blue-600">Ace the interview.</span>
+            Be Ready for Every Interview —{' '}
+            <span className="text-blue-600">Not Just the Next One.</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-gray-600 sm:text-xl">
-            Create role-specific landing pages that get you noticed, then prepare with
-            AI-generated interview questions and personalized answers based on your actual resume.
+            Create targeted career pages, organize your application history, and prepare with
+            AI-guided interview coaching that evolves as your job search progresses.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link href="/auth/signup">
