@@ -136,6 +136,32 @@ export default function CareerIntelligencePage() {
     }
   };
 
+  const handleGenerateForJob = async (jobId: string) => {
+    const response = await fetch('/api/career-intelligence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobId }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to generate');
+    }
+
+    const data = await response.json();
+
+    // Update state with new data
+    if (data.applicationBrain) {
+      setBrainSnapshots((prev) => [data.applicationBrain, ...prev]);
+    }
+    if (data.careerNarrative) {
+      setNarrative(data.careerNarrative);
+    }
+    if (data.careerAssets && data.careerAssets.length > 0) {
+      setAssets((prev) => [...data.careerAssets, ...prev]);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -224,7 +250,7 @@ export default function CareerIntelligencePage() {
       )}
 
       {activeTab === 'brain' && (
-        <BrainTab snapshots={brainSnapshots} />
+        <BrainTab snapshots={brainSnapshots} onGenerateForJob={handleGenerateForJob} />
       )}
 
       {activeTab === 'settings' && (
@@ -449,12 +475,64 @@ function VaultTab({
 // BRAIN TAB
 // =============================================================================
 
-function BrainTab({ snapshots }: { snapshots: ApplicationBrain[] }) {
+function BrainTab({
+  snapshots,
+  onGenerateForJob
+}: {
+  snapshots: ApplicationBrain[];
+  onGenerateForJob: (jobId: string) => Promise<void>;
+}) {
   const [selectedSnapshot, setSelectedSnapshot] = useState<ApplicationBrain | null>(
     snapshots[0] || null
   );
+  const [jobs, setJobs] = useState<Array<{ id: string; role_title: string; company_name: string }>>([]);
+  const [isLoadingJobs, setIsLoadingJobs] = useState(false);
+  const [generatingJobId, setGeneratingJobId] = useState<string | null>(null);
 
-  if (snapshots.length === 0) {
+  // Load jobs that don't have brain snapshots
+  useEffect(() => {
+    async function loadJobsWithoutInsights() {
+      setIsLoadingJobs(true);
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get all jobs with signal pages
+      const { data: allJobs } = await supabase
+        .from('jobs')
+        .select('id, role_title, company_name, signal_pages(id)')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      // Filter to jobs that have signal pages but no brain snapshot
+      const jobIdsWithSnapshots = new Set(snapshots.map(s => s.job_id));
+      const jobsWithPages = (allJobs || []).filter(
+        (j: { signal_pages: unknown[] }) => j.signal_pages && j.signal_pages.length > 0
+      );
+      const jobsNeedingInsights = jobsWithPages.filter(
+        (j: { id: string }) => !jobIdsWithSnapshots.has(j.id)
+      );
+
+      setJobs(jobsNeedingInsights);
+      setIsLoadingJobs(false);
+    }
+
+    loadJobsWithoutInsights();
+  }, [snapshots]);
+
+  const handleGenerate = async (jobId: string) => {
+    setGeneratingJobId(jobId);
+    try {
+      await onGenerateForJob(jobId);
+      // Remove from list after successful generation
+      setJobs(prev => prev.filter(j => j.id !== jobId));
+    } catch (error) {
+      console.error('Failed to generate:', error);
+    }
+    setGeneratingJobId(null);
+  };
+
+  if (snapshots.length === 0 && jobs.length === 0 && !isLoadingJobs) {
     return (
       <Card>
         <CardContent className="p-8 text-center">
@@ -470,32 +548,103 @@ function BrainTab({ snapshots }: { snapshots: ApplicationBrain[] }) {
     );
   }
 
-  return (
-    <div className="grid gap-6 lg:grid-cols-3">
-      {/* Snapshot List */}
-      <div className="lg:col-span-1">
-        <Card>
-          <CardHeader>
-            <CardTitle>Application History</CardTitle>
-          </CardHeader>
-          <CardContent className="max-h-[500px] overflow-y-auto p-0">
-            {snapshots.map((snapshot) => (
-              <button
-                key={snapshot.id}
-                onClick={() => setSelectedSnapshot(snapshot)}
-                className={`w-full border-b p-4 text-left transition-colors last:border-b-0 hover:bg-gray-50 ${
-                  selectedSnapshot?.id === snapshot.id ? 'bg-blue-50' : ''
-                }`}
-              >
-                <p className="font-medium text-gray-900">{snapshot.role_seniority || 'Role Analysis'}</p>
-                <p className="text-xs text-gray-500">
-                  {new Date(snapshot.created_at).toLocaleDateString()}
-                </p>
-              </button>
+  // Show jobs that need insights generated
+  if (snapshots.length === 0 && jobs.length > 0) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="mb-4 flex items-center gap-3">
+            <span className="text-2xl">🧠</span>
+            <div>
+              <h3 className="font-medium text-gray-900">Generate Insights for Existing Pages</h3>
+              <p className="text-sm text-gray-600">
+                You have {jobs.length} Signal Page{jobs.length > 1 ? 's' : ''} without Career Intelligence insights
+              </p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {jobs.map((job) => (
+              <div key={job.id} className="flex items-center justify-between rounded-lg border p-4">
+                <div>
+                  <p className="font-medium text-gray-900">{job.role_title}</p>
+                  <p className="text-sm text-gray-500">{job.company_name}</p>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => handleGenerate(job.id)}
+                  disabled={generatingJobId !== null}
+                >
+                  {generatingJobId === job.id ? 'Generating...' : 'Generate Insights'}
+                </Button>
+              </div>
             ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Jobs needing insights */}
+      {jobs.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">💡</span>
+                <p className="text-sm text-amber-800">
+                  <strong>{jobs.length}</strong> page{jobs.length > 1 ? 's' : ''} without insights
+                </p>
+              </div>
+              <div className="flex gap-2">
+                {jobs.slice(0, 2).map((job) => (
+                  <Button
+                    key={job.id}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleGenerate(job.id)}
+                    disabled={generatingJobId !== null}
+                    className="text-xs"
+                  >
+                    {generatingJobId === job.id ? 'Generating...' : `${job.company_name}`}
+                  </Button>
+                ))}
+                {jobs.length > 2 && (
+                  <span className="text-xs text-amber-700 self-center">+{jobs.length - 2} more</span>
+                )}
+              </div>
+            </div>
           </CardContent>
         </Card>
-      </div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Snapshot List */}
+        <div className="lg:col-span-1">
+          <Card>
+            <CardHeader>
+              <CardTitle>Application History</CardTitle>
+            </CardHeader>
+            <CardContent className="max-h-[500px] overflow-y-auto p-0">
+              {snapshots.map((snapshot) => (
+                <button
+                  key={snapshot.id}
+                  onClick={() => setSelectedSnapshot(snapshot)}
+                  className={`w-full border-b p-4 text-left transition-colors last:border-b-0 hover:bg-gray-50 ${
+                    selectedSnapshot?.id === snapshot.id ? 'bg-blue-50' : ''
+                  }`}
+                >
+                  <p className="font-medium text-gray-900">{snapshot.role_seniority || 'Role Analysis'}</p>
+                  <p className="text-xs text-gray-500">
+                    {new Date(snapshot.created_at).toLocaleDateString()}
+                  </p>
+                </button>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
 
       {/* Snapshot Details */}
       <div className="space-y-4 lg:col-span-2">
@@ -575,6 +724,7 @@ function BrainTab({ snapshots }: { snapshots: ApplicationBrain[] }) {
           </Card>
         )}
       </div>
+    </div>
     </div>
   );
 }
