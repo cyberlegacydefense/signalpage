@@ -10,7 +10,6 @@ import { InterviewPrep } from '@/components/InterviewPrep';
 import { EmailGenerator } from '@/components/EmailGenerator';
 import { AddToResumeModal } from '@/components/AddToResumeModal';
 import { hasCoachAccess } from '@/lib/stripe';
-import type { ParsedResume } from '@/types';
 import type {
   SignalPage,
   HeroSection,
@@ -68,9 +67,6 @@ export default function PageEditorPage({ params }: PageProps) {
   const [subscriptionTier, setSubscriptionTier] = useState<string>('free');
   const [jobId, setJobId] = useState<string | null>(null);
   const [showAddToResumeModal, setShowAddToResumeModal] = useState(false);
-  const [parsedResume, setParsedResume] = useState<ParsedResume | null>(null);
-  const [userEmail, setUserEmail] = useState<string>('');
-  const [userFullName, setUserFullName] = useState<string>('');
 
   useEffect(() => {
     async function loadPage() {
@@ -84,28 +80,13 @@ export default function PageEditorPage({ params }: PageProps) {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('username, subscription_tier, full_name')
+        .select('username, subscription_tier')
         .eq('id', user.id)
         .single();
 
       if (profile) {
         setUsername(profile.username);
         setSubscriptionTier(profile.subscription_tier || 'free');
-        setUserFullName(profile.full_name || '');
-      }
-
-      setUserEmail(user.email || '');
-
-      // Fetch the primary resume for Add to Resume feature
-      const { data: resume } = await supabase
-        .from('resumes')
-        .select('parsed_data')
-        .eq('user_id', user.id)
-        .eq('is_primary', true)
-        .maybeSingle();
-
-      if (resume?.parsed_data) {
-        setParsedResume(resume.parsed_data as ParsedResume);
       }
 
       const { data, error } = await supabase
@@ -687,18 +668,16 @@ export default function PageEditorPage({ params }: PageProps) {
                   Open
                 </Button>
               </Link>
-              {parsedResume && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowAddToResumeModal(true)}
-                >
-                  <svg className="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Add to Resume
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAddToResumeModal(true)}
+              >
+                <svg className="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Add to Resume
+              </Button>
             </div>
           </div>
           {!page.is_published && (
@@ -1524,16 +1503,11 @@ export default function PageEditorPage({ params }: PageProps) {
       </div>
 
       {/* Add to Resume Modal */}
-      {parsedResume && (
-        <AddToResumeModal
-          isOpen={showAddToResumeModal}
-          onClose={() => setShowAddToResumeModal(false)}
-          signalPageUrl={`${typeof window !== 'undefined' ? window.location.origin : 'https://signalpage.ai'}${pageUrl}`}
-          parsedResume={parsedResume}
-          userName={userFullName || username}
-          userEmail={userEmail}
-        />
-      )}
+      <AddToResumeModal
+        isOpen={showAddToResumeModal}
+        onClose={() => setShowAddToResumeModal(false)}
+        signalPageUrl={`${typeof window !== 'undefined' ? window.location.origin : 'https://signalpage.ai'}${pageUrl}`}
+      />
     </div>
   );
 }
