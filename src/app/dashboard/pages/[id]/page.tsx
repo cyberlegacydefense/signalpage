@@ -8,7 +8,6 @@ import { createClient } from '@/lib/supabase/client';
 import { Button, Card, CardHeader, CardTitle, CardContent, Badge } from '@/components/ui';
 import { InterviewPrep } from '@/components/InterviewPrep';
 import { EmailGenerator } from '@/components/EmailGenerator';
-import { AddToResumeModal } from '@/components/AddToResumeModal';
 import { hasCoachAccess } from '@/lib/stripe';
 import type {
   SignalPage,
@@ -66,7 +65,7 @@ export default function PageEditorPage({ params }: PageProps) {
   const [activeTab, setActiveTab] = useState<'content' | 'interview' | 'emails'>('content');
   const [subscriptionTier, setSubscriptionTier] = useState<string>('free');
   const [jobId, setJobId] = useState<string | null>(null);
-  const [showAddToResumeModal, setShowAddToResumeModal] = useState(false);
+  const [resumeLinkCopied, setResumeLinkCopied] = useState(false);
 
   useEffect(() => {
     async function loadPage() {
@@ -668,22 +667,50 @@ export default function PageEditorPage({ params }: PageProps) {
                   Open
                 </Button>
               </Link>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowAddToResumeModal(true)}
-              >
-                <svg className="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Add to Resume
-              </Button>
             </div>
           </div>
           {!page.is_published && (
             <p className="mt-2 text-xs text-gray-500">
               This URL will only be accessible to others after you publish the page.
             </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Add Link To Resume Card */}
+      <Card>
+        <CardContent className="py-4">
+          <p className="text-sm font-medium text-gray-700 mb-2">Add Link To Resume (click to copy)</p>
+          <button
+            onClick={async () => {
+              const fullUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://signalpage.ai'}${pageUrl}`;
+              const resumeLink = `Digital Portfolio: ${fullUrl}`;
+              await navigator.clipboard.writeText(resumeLink);
+              setResumeLinkCopied(true);
+              setTimeout(() => setResumeLinkCopied(false), 2000);
+            }}
+            className="w-full text-left p-3 rounded-lg bg-gray-50 border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors group"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-gray-900 break-all">
+                <span className="font-medium">Digital Portfolio:</span>{' '}
+                <span className="text-blue-600">{typeof window !== 'undefined' ? window.location.origin : 'https://signalpage.ai'}{pageUrl}</span>
+              </p>
+              <div className="flex-shrink-0">
+                {resumeLinkCopied ? (
+                  <svg className="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  <svg className="h-5 w-5 text-gray-400 group-hover:text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                  </svg>
+                )}
+              </div>
+            </div>
+          </button>
+          {resumeLinkCopied && (
+            <p className="mt-2 text-xs text-green-600 text-center">Copied to clipboard!</p>
           )}
         </CardContent>
       </Card>
@@ -1502,12 +1529,6 @@ export default function PageEditorPage({ params }: PageProps) {
         </Card>
       </div>
 
-      {/* Add to Resume Modal */}
-      <AddToResumeModal
-        isOpen={showAddToResumeModal}
-        onClose={() => setShowAddToResumeModal(false)}
-        signalPageUrl={`${typeof window !== 'undefined' ? window.location.origin : 'https://signalpage.ai'}${pageUrl}`}
-      />
     </div>
   );
 }

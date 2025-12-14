@@ -413,12 +413,15 @@ export default function NewJobPage() {
                   </div>
                 )}
                 {fetchSuccess && (
-                  <div className="rounded-md bg-green-50 p-3 text-sm text-green-800">
+                  <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
                     <div className="flex items-start gap-2">
                       <svg className="mt-0.5 h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                       </svg>
-                      {fetchSuccess}
+                      <div>
+                        <p className="font-medium">Job description extracted - please verify!</p>
+                        <p className="mt-1 text-xs">Some job sites may not extract correctly. Please review the text below and ensure the full job description is included. If anything is missing, copy and paste the complete description from the original posting.</p>
+                      </div>
                     </div>
                   </div>
                 )}

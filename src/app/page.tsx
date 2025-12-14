@@ -20,12 +20,13 @@ export default function Home() {
             Now with AI Interview Coach
           </div>
           <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl md:text-6xl">
-            Be Ready for Every Interview —{' '}
-            <span className="text-blue-600">Not Just the Next One.</span>
+            Your resume shows where you&apos;ve been.{' '}
+            <span className="text-blue-600">SignalPage shows what you&apos;ll do next.</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-gray-600 sm:text-xl">
-            Create targeted career pages, organize your application history, and prepare with
-            AI-guided interview coaching that evolves as your job search progresses.
+            Create role-specific career pages that explain your fit, intent, and readiness—while
+            organizing your applications and preparing you with AI-guided interview coaching
+            that evolves as your job search progresses.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link href="/auth/signup">

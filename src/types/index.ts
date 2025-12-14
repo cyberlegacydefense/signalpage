@@ -476,3 +476,64 @@ export interface CareerIntelligenceOutput {
   careerNarrative: Omit<CareerNarrative, 'id' | 'user_id' | 'version' | 'is_active' | 'source_job_id' | 'created_at' | 'updated_at'>;
   careerAssets: Array<Omit<CareerAsset, 'id' | 'user_id' | 'is_active' | 'created_at' | 'updated_at'>>;
 }
+
+// =============================================================================
+// NOTIFICATIONS & ENHANCED ANALYTICS
+// =============================================================================
+
+export type NotificationType = 'page_view' | 'return_visitor' | 'high_engagement' | 'weekly_digest';
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  page_id?: string;
+  metadata: Record<string, unknown>;
+  is_read: boolean;
+  is_emailed: boolean;
+  created_at: string;
+}
+
+export interface UserNotificationSettings {
+  id: string;
+  user_id: string;
+  email_on_page_view: boolean;
+  email_on_return_visitor: boolean;
+  email_on_high_engagement: boolean;
+  email_weekly_digest: boolean;
+  digest_day: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AnalyticsSnapshot {
+  id: string;
+  user_id: string;
+  page_id: string;
+  week_start: string;
+  total_views: number;
+  unique_visitors: number;
+  return_visitors: number;
+  avg_time_on_page: number;
+  high_engagement_count: number;
+  top_referrers: Array<{ referrer: string; count: number }>;
+  created_at: string;
+}
+
+export interface VisitorFingerprint {
+  visitor_hash: string;
+  screen_resolution: string;
+  timezone: string;
+  language: string;
+}
+
+export interface EnhancedAnalyticsEvent {
+  pageId: string;
+  eventType: AnalyticsEventType;
+  sectionId?: string;
+  metadata?: Record<string, unknown>;
+  visitorFingerprint?: VisitorFingerprint;
+  timeOnPage?: number;
+}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
+import { Document, Packer, Paragraph, TextRun, AlignmentType } from 'docx';
 
 interface EmailGeneratorProps {
   jobId: string;
@@ -193,6 +194,83 @@ export function EmailGenerator({ jobId, hasAccess }: EmailGeneratorProps) {
   const handleCopy = async (email: EmailRecord) => {
     const text = `Subject: ${email.subject || ''}\n\n${email.body}`;
     await navigator.clipboard.writeText(text);
+  };
+
+  const handleDownloadDocx = async (email: EmailRecord) => {
+    const paragraphs: Paragraph[] = [];
+
+    // Add each line as a paragraph, preserving formatting
+    const lines = email.body.split('\n');
+    for (const line of lines) {
+      if (line.trim() === '') {
+        paragraphs.push(new Paragraph({ text: '' }));
+      } else {
+        paragraphs.push(
+          new Paragraph({
+            children: [new TextRun({ text: line, size: 24 })],
+            spacing: { after: 120 },
+          })
+        );
+      }
+    }
+
+    const doc = new Document({
+      sections: [
+        {
+          properties: {
+            page: {
+              margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
+            },
+          },
+          children: paragraphs,
+        },
+      ],
+    });
+
+    const blob = await Packer.toBlob(doc);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${EMAIL_TYPE_LABELS[email.email_type].replace(/\s+/g, '_')}.docx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadPdf = (email: EmailRecord) => {
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      const bodyHtml = email.body
+        .split('\n')
+        .map(line => line.trim() === '' ? '<br/>' : `<p style="margin: 0 0 8px 0;">${line}</p>`)
+        .join('');
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>${EMAIL_TYPE_LABELS[email.email_type]}</title>
+          <style>
+            @page { margin: 1in; }
+            body {
+              font-family: 'Times New Roman', serif;
+              font-size: 12pt;
+              line-height: 1.5;
+              max-width: 7in;
+              margin: 0 auto;
+            }
+            p { margin: 0 0 8px 0; }
+          </style>
+        </head>
+        <body>
+          ${bodyHtml}
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
+    }
   };
 
   const getEmailLabel = (email: EmailRecord): string => {
@@ -445,18 +523,44 @@ export function EmailGenerator({ jobId, hasAccess }: EmailGeneratorProps) {
                           </p>
                         </div>
 
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs text-gray-500">
-                            Generated {new Date(email.created_at).toLocaleDateString()}
-                            {email.include_signalpage_link && (
-                              <span className="ml-2 text-blue-600">• Includes SignalPage link</span>
-                            )}
-                          </p>
-                          <div className="flex gap-2">
+                        <div className="flex flex-col gap-3">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-gray-500">
+                              Generated {new Date(email.created_at).toLocaleDateString()}
+                              {email.include_signalpage_link && (
+                                <span className="ml-2 text-blue-600">• Includes SignalPage link</span>
+                              )}
+                            </p>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEdit(email)}
+                              >
+                                <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                </svg>
+                                Edit
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDelete(email.id)}
+                                className="text-red-600 hover:bg-red-50"
+                              >
+                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </Button>
+                            </div>
+                          </div>
+                          {/* Download/Copy buttons */}
+                          <div className="flex gap-2 border-t border-gray-200 pt-3">
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => handleCopy(email)}
+                              className="flex-1"
                             >
                               <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
@@ -466,22 +570,24 @@ export function EmailGenerator({ jobId, hasAccess }: EmailGeneratorProps) {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleEdit(email)}
+                              onClick={() => handleDownloadDocx(email)}
+                              className="flex-1"
                             >
                               <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                               </svg>
-                              Edit
+                              DOCX
                             </Button>
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleDelete(email.id)}
-                              className="text-red-600 hover:bg-red-50"
+                              onClick={() => handleDownloadPdf(email)}
+                              className="flex-1"
                             >
-                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                               </svg>
+                              PDF
                             </Button>
                           </div>
                         </div>

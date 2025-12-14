@@ -9,6 +9,7 @@ import {
   AICommentarySection,
   CTASection,
 } from '@/components/landing';
+import { AnalyticsTracker } from '@/components/AnalyticsTracker';
 import type { Metadata } from 'next';
 import type {
   HeroSection as HeroSectionType,
@@ -163,6 +164,9 @@ export default async function SignalPage({ params }: PageProps) {
 
   return (
     <div className="min-h-screen bg-white">
+      {/* Client-side analytics tracker */}
+      <AnalyticsTracker pageId={page.id} isOwner={isOwner} />
+
       {/* Preview banner for unpublished pages */}
       {isOwner && !page.is_published && (
         <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-3">
