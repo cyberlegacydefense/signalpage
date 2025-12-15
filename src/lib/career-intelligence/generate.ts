@@ -112,6 +112,7 @@ export async function generateCareerIntelligence(
   const contextStr = buildCareerIntelligenceContext(context);
 
   // Generate career intelligence
+  // Use Haiku for faster generation - it's sufficient for structured analysis
   console.log(`[Career Intelligence] Calling LLM for job ${jobId}`);
   const llm = getLLMClient();
   const result = await llm.complete({
@@ -119,7 +120,7 @@ export async function generateCareerIntelligence(
       { role: 'system', content: CAREER_INTELLIGENCE_SYSTEM_PROMPT },
       { role: 'user', content: `${CAREER_INTELLIGENCE_PROMPT}\n\n${contextStr}` },
     ],
-    config: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', temperature: 0.5, maxTokens: 3000 },
+    config: { provider: 'anthropic', model: 'claude-3-5-haiku-20241022', temperature: 0.3, maxTokens: 2500 },
   });
 
   // Parse response

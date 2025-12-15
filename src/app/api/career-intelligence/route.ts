@@ -82,10 +82,16 @@ export async function GET(request: Request) {
       .eq('is_active', true)
       .order('created_at', { ascending: false });
 
-    // Get application brain (optionally filtered by job)
+    // Get application brain (optionally filtered by job) with job details
     let brainQuery = supabase
       .from('application_brain')
-      .select('*')
+      .select(`
+        *,
+        jobs:job_id (
+          role_title,
+          company_name
+        )
+      `)
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
 

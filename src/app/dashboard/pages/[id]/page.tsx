@@ -716,7 +716,7 @@ export default function PageEditorPage({ params }: PageProps) {
       </Card>
 
       {/* Tabs */}
-      <div className="mb-6 border-b border-gray-200">
+      <div className="mt-6 mb-6 border-b border-gray-200">
         <nav className="flex gap-6">
           <button
             onClick={() => setActiveTab('content')}

@@ -673,20 +673,28 @@ function BrainTab({
               <CardTitle>Application History</CardTitle>
             </CardHeader>
             <CardContent className="max-h-[500px] overflow-y-auto p-0">
-              {snapshots.map((snapshot) => (
-                <button
-                  key={snapshot.id}
-                  onClick={() => setSelectedSnapshot(snapshot)}
-                  className={`w-full border-b p-4 text-left transition-colors last:border-b-0 hover:bg-gray-50 ${
-                    selectedSnapshot?.id === snapshot.id ? 'bg-blue-50' : ''
-                  }`}
-                >
-                  <p className="font-medium text-gray-900">{snapshot.role_seniority || 'Role Analysis'}</p>
-                  <p className="text-xs text-gray-500">
-                    {new Date(snapshot.created_at).toLocaleDateString()}
-                  </p>
-                </button>
-              ))}
+              {snapshots.map((snapshot) => {
+                // Get job info from the joined data
+                const jobInfo = (snapshot as unknown as { jobs?: { role_title?: string; company_name?: string } }).jobs;
+                const title = jobInfo?.role_title && jobInfo?.company_name
+                  ? `${jobInfo.role_title} @ ${jobInfo.company_name}`
+                  : snapshot.role_seniority || 'Role Analysis';
+
+                return (
+                  <button
+                    key={snapshot.id}
+                    onClick={() => setSelectedSnapshot(snapshot)}
+                    className={`w-full border-b p-4 text-left transition-colors last:border-b-0 hover:bg-gray-50 ${
+                      selectedSnapshot?.id === snapshot.id ? 'bg-blue-50' : ''
+                    }`}
+                  >
+                    <p className="font-medium text-gray-900">{title}</p>
+                    <p className="text-xs text-gray-500">
+                      {new Date(snapshot.created_at).toLocaleDateString()}
+                    </p>
+                  </button>
+                );
+              })}
             </CardContent>
           </Card>
         </div>
