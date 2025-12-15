@@ -38,8 +38,16 @@ export async function GET() {
   }
 }
 
-// PUT - Update user's notification settings
+// POST/PUT - Update user's notification settings
+export async function POST(request: Request) {
+  return updateSettings(request);
+}
+
 export async function PUT(request: Request) {
+  return updateSettings(request);
+}
+
+async function updateSettings(request: Request) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();

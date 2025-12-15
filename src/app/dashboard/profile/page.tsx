@@ -18,6 +18,14 @@ import {
 import type { User, Resume, ParsedResume } from '@/types';
 import { RESUME_TAGS } from '@/types';
 
+interface NotificationSettings {
+  email_on_page_view: boolean;
+  email_on_return_visitor: boolean;
+  email_on_high_engagement: boolean;
+  email_weekly_digest: boolean;
+  digest_day: string;
+}
+
 interface StripeDetails {
   currentPeriodEnd: number;
   cancelAtPeriodEnd: boolean;
@@ -60,11 +68,22 @@ export default function ProfilePage() {
   const [resumeText, setResumeText] = useState('');
   const [currentResume, setCurrentResume] = useState<Resume | null>(null);
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>({
+    email_on_page_view: false,
+    email_on_return_visitor: true,
+    email_on_high_engagement: true,
+    email_weekly_digest: true,
+    digest_day: 'monday',
+  });
+  const [isSavingNotifications, setIsSavingNotifications] = useState(false);
+  const [notificationSuccess, setNotificationSuccess] = useState('');
+  const [notificationError, setNotificationError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadData();
     loadSubscription();
+    loadNotificationSettings();
   }, []);
 
   async function loadSubscription() {
@@ -76,6 +95,45 @@ export default function ProfilePage() {
       }
     } catch (err) {
       console.error('Failed to load subscription:', err);
+    }
+  }
+
+  async function loadNotificationSettings() {
+    try {
+      const response = await fetch('/api/notifications/settings');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.settings) {
+          setNotificationSettings(data.settings);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load notification settings:', err);
+    }
+  }
+
+  async function saveNotificationSettings() {
+    setIsSavingNotifications(true);
+    setNotificationError('');
+    setNotificationSuccess('');
+
+    try {
+      const response = await fetch('/api/notifications/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(notificationSettings),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to save settings');
+      }
+
+      setNotificationSuccess('Notification settings saved!');
+    } catch (err) {
+      setNotificationError(err instanceof Error ? err.message : 'Failed to save settings');
+    } finally {
+      setIsSavingNotifications(false);
     }
   }
 
@@ -832,6 +890,166 @@ export default function ProfilePage() {
               <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Notification Settings Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Email Notifications</CardTitle>
+          <CardDescription>
+            Choose which email notifications you want to receive about your SignalPages.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="space-y-6">
+          {notificationError && (
+            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600">
+              {notificationError}
+            </div>
+          )}
+          {notificationSuccess && (
+            <div className="rounded-lg bg-green-50 p-3 text-sm text-green-600">
+              {notificationSuccess}
+            </div>
+          )}
+
+          {/* Weekly Digest */}
+          <div className="space-y-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <h4 className="font-medium text-gray-900">Weekly Analytics Digest</h4>
+                <p className="text-sm text-gray-500">
+                  Get a summary of views, visitors, and engagement across all your pages.
+                </p>
+              </div>
+              <label className="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  checked={notificationSettings.email_weekly_digest}
+                  onChange={(e) =>
+                    setNotificationSettings((prev) => ({
+                      ...prev,
+                      email_weekly_digest: e.target.checked,
+                    }))
+                  }
+                  className="peer sr-only"
+                />
+                <div className="h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:ring-2 peer-focus:ring-blue-300" />
+              </label>
+            </div>
+
+            {notificationSettings.email_weekly_digest && (
+              <div className="ml-0 pl-4 border-l-2 border-gray-100">
+                <Select
+                  label="Send digest on"
+                  value={notificationSettings.digest_day}
+                  onChange={(e) =>
+                    setNotificationSettings((prev) => ({
+                      ...prev,
+                      digest_day: e.target.value,
+                    }))
+                  }
+                  options={[
+                    { value: 'monday', label: 'Monday' },
+                    { value: 'tuesday', label: 'Tuesday' },
+                    { value: 'wednesday', label: 'Wednesday' },
+                    { value: 'thursday', label: 'Thursday' },
+                    { value: 'friday', label: 'Friday' },
+                    { value: 'saturday', label: 'Saturday' },
+                    { value: 'sunday', label: 'Sunday' },
+                  ]}
+                />
+              </div>
+            )}
+          </div>
+
+          <hr className="border-gray-100" />
+
+          {/* Real-time Notifications */}
+          <div className="space-y-4">
+            <h4 className="font-medium text-gray-900">Real-time Alerts</h4>
+
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="font-medium text-gray-700">Return Visitors</p>
+                <p className="text-sm text-gray-500">
+                  When someone views your page more than once.
+                </p>
+              </div>
+              <label className="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  checked={notificationSettings.email_on_return_visitor}
+                  onChange={(e) =>
+                    setNotificationSettings((prev) => ({
+                      ...prev,
+                      email_on_return_visitor: e.target.checked,
+                    }))
+                  }
+                  className="peer sr-only"
+                />
+                <div className="h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:ring-2 peer-focus:ring-blue-300" />
+              </label>
+            </div>
+
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="font-medium text-gray-700">High Engagement</p>
+                <p className="text-sm text-gray-500">
+                  When someone spends 2+ minutes on your page.
+                </p>
+              </div>
+              <label className="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  checked={notificationSettings.email_on_high_engagement}
+                  onChange={(e) =>
+                    setNotificationSettings((prev) => ({
+                      ...prev,
+                      email_on_high_engagement: e.target.checked,
+                    }))
+                  }
+                  className="peer sr-only"
+                />
+                <div className="h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:ring-2 peer-focus:ring-blue-300" />
+              </label>
+            </div>
+
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="font-medium text-gray-700">Every Page View</p>
+                <p className="text-sm text-gray-500">
+                  Get notified for every view (can be noisy).
+                </p>
+              </div>
+              <label className="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  checked={notificationSettings.email_on_page_view}
+                  onChange={(e) =>
+                    setNotificationSettings((prev) => ({
+                      ...prev,
+                      email_on_page_view: e.target.checked,
+                    }))
+                  }
+                  className="peer sr-only"
+                />
+                <div className="h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:ring-2 peer-focus:ring-blue-300" />
+              </label>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-4">
+            <Button
+              type="button"
+              variant="primary"
+              onClick={saveNotificationSettings}
+              isLoading={isSavingNotifications}
+            >
+              Save Notification Settings
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
