@@ -48,6 +48,7 @@ export function EmailGenerator({ jobId, hasAccess }: EmailGeneratorProps) {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   // Form state
   const [emailType, setEmailType] = useState<EmailType>('cover_letter');
@@ -88,6 +89,7 @@ export function EmailGenerator({ jobId, hasAccess }: EmailGeneratorProps) {
   const handleGenerate = async () => {
     setGenerating(true);
     setError(null);
+    setWarning(null);
 
     try {
       const response = await fetch('/api/generate-email', {
@@ -106,6 +108,11 @@ export function EmailGenerator({ jobId, hasAccess }: EmailGeneratorProps) {
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to generate email');
+      }
+
+      // Show warning if SignalPage link couldn't be added
+      if (data.warning) {
+        setWarning(data.warning);
       }
 
       // Add or update the email in the list
@@ -449,6 +456,12 @@ export function EmailGenerator({ jobId, hasAccess }: EmailGeneratorProps) {
             {error && (
               <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
                 {error}
+              </div>
+            )}
+
+            {warning && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+                {warning}
               </div>
             )}
 

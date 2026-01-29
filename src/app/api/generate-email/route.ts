@@ -293,6 +293,7 @@ Always output valid JSON as specified in the prompt.`
 
     // Get SignalPage URL if needed
     let signalPageUrl = '';
+    let signalPageLinkWarning = '';
     if (includeSignalpageLink) {
       // Get user's username for the URL
       const { data: userProfileForUrl } = await supabase
@@ -307,8 +308,16 @@ Always output valid JSON as specified in the prompt.`
         .eq('job_id', jobId)
         .maybeSingle();
 
+      console.log(`[Email Gen] SignalPage link check - username: ${userProfileForUrl?.username || 'MISSING'}, slug: ${signalPage?.slug || 'MISSING'}`);
+
       if (signalPage?.slug && userProfileForUrl?.username) {
         signalPageUrl = `https://signalpage.ai/${userProfileForUrl.username}/${signalPage.slug}`;
+      } else if (!signalPage?.slug) {
+        signalPageLinkWarning = 'SignalPage link was not included because no Signal Page exists for this job. Generate a Signal Page first to include the link.';
+        console.log(`[Email Gen] Cannot add SignalPage link: signal page not found for this job`);
+      } else {
+        signalPageLinkWarning = 'SignalPage link was not included because your profile username is not set.';
+        console.log(`[Email Gen] Cannot add SignalPage link: username not set`);
       }
     }
 
@@ -388,7 +397,8 @@ Always output valid JSON as specified in the prompt.`
 
     return NextResponse.json({
       success: true,
-      email: savedEmail
+      email: savedEmail,
+      warning: signalPageLinkWarning || undefined
     });
 
   } catch (error) {
