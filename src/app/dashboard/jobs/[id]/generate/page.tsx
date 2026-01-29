@@ -97,7 +97,7 @@ export default function GeneratePage({ params }: PageProps) {
         .from('signal_pages')
         .select('id')
         .eq('job_id', jobId)
-        .single();
+        .maybeSingle();
 
       if (existingPage) {
         router.push(`/dashboard/pages/${existingPage.id}`);
@@ -122,8 +122,23 @@ export default function GeneratePage({ params }: PageProps) {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to generate page');
+        // Handle gateway timeouts (504) which return HTML instead of JSON
+        if (response.status === 504) {
+          throw new Error('Generation timed out. This can happen with complex job descriptions. Please try again.');
+        }
+
+        // Try to parse JSON error, but handle HTML error pages gracefully
+        let errorMessage = 'Failed to generate page';
+        try {
+          const data = await response.json();
+          errorMessage = data.error || errorMessage;
+        } catch {
+          // Response wasn't JSON (likely HTML error page)
+          if (response.status >= 500) {
+            errorMessage = 'Server error. Please try again in a moment.';
+          }
+        }
+        throw new Error(errorMessage);
       }
 
       const { page } = await response.json();
