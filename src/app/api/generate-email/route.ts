@@ -302,16 +302,25 @@ Always output valid JSON as specified in the prompt.`
         .eq('id', user.id)
         .single();
 
-      const { data: signalPage } = await supabase
+      const { data: signalPage, error: signalPageError } = await supabase
         .from('signal_pages')
-        .select('slug')
+        .select('slug, is_published')
         .eq('job_id', jobId)
+        .eq('user_id', user.id)
         .maybeSingle();
 
-      console.log(`[Email Gen] SignalPage link check - username: ${userProfileForUrl?.username || 'MISSING'}, slug: ${signalPage?.slug || 'MISSING'}`);
+      if (signalPageError) {
+        console.error(`[Email Gen] Error fetching signal page:`, signalPageError);
+      }
+      console.log(`[Email Gen] SignalPage link check - username: ${userProfileForUrl?.username || 'MISSING'}, slug: ${signalPage?.slug || 'MISSING'}, published: ${signalPage?.is_published ?? 'N/A'}`);
 
       if (signalPage?.slug && userProfileForUrl?.username) {
-        signalPageUrl = `https://signalpage.ai/${userProfileForUrl.username}/${signalPage.slug}`;
+        if (signalPage.is_published) {
+          signalPageUrl = `https://signalpage.ai/${userProfileForUrl.username}/${signalPage.slug}`;
+        } else {
+          signalPageLinkWarning = 'SignalPage link was not included because the Signal Page is not published yet. Publish your Signal Page to include the link.';
+          console.log(`[Email Gen] Cannot add SignalPage link: page exists but is not published`);
+        }
       } else if (!signalPage?.slug) {
         signalPageLinkWarning = 'SignalPage link was not included because no Signal Page exists for this job. Generate a Signal Page first to include the link.';
         console.log(`[Email Gen] Cannot add SignalPage link: signal page not found for this job`);
