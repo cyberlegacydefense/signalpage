@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Button, Card, CardHeader, CardTitle, CardContent, Badge } from '@/components/ui';
 import { InterviewPrep } from '@/components/InterviewPrep';
 import { EmailGenerator } from '@/components/EmailGenerator';
+import { ApplicationTracker } from '@/components/ApplicationTracker';
 import { hasCoachAccess } from '@/lib/stripe';
 import type {
   SignalPage,
@@ -17,6 +18,8 @@ import type {
   Plan306090,
   CaseStudy,
   MatchBreakdown,
+  ApplicationStatus,
+  InterviewRound,
 } from '@/types';
 
 interface PageProps {
@@ -25,8 +28,12 @@ interface PageProps {
 
 interface PageData extends SignalPage {
   jobs: {
+    id: string;
     company_name: string;
     role_title: string;
+    application_status: ApplicationStatus;
+    interview_rounds: InterviewRound[];
+    applied_at: string | null;
   };
 }
 
@@ -93,8 +100,12 @@ export default function PageEditorPage({ params }: PageProps) {
         .select(`
           *,
           jobs (
+            id,
             company_name,
-            role_title
+            role_title,
+            application_status,
+            interview_rounds,
+            applied_at
           )
         `)
         .eq('id', pageId)
@@ -1483,6 +1494,16 @@ export default function PageEditorPage({ params }: PageProps) {
             )}
           </CardContent>
         </Card>
+      </div>
+
+      {/* Application Tracking */}
+      <div className="mt-8">
+        <ApplicationTracker
+          jobId={page.jobs.id}
+          initialStatus={page.jobs.application_status || 'not_applied'}
+          initialRounds={page.jobs.interview_rounds || []}
+          appliedAt={page.jobs.applied_at}
+        />
       </div>
       </>
       )}

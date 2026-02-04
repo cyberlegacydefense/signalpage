@@ -71,6 +71,8 @@ export default async function DashboardPage({
     role_title: job.role_title,
     company_name: job.company_name,
     status: job.status,
+    application_status: job.application_status || 'not_applied',
+    interview_rounds: job.interview_rounds || [],
     created_at: job.created_at,
     signal_pages: (job.signal_pages || []).map((p: { id: string; slug: string; is_published: boolean; generated_at: string; match_score: number | null }) => ({
       ...p,

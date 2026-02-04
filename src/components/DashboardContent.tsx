@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button, Card, CardContent, Badge } from '@/components/ui';
+import { ApplicationStatusBadge } from '@/components/ApplicationTracker';
 import { formatDistanceToNow } from 'date-fns';
+import type { ApplicationStatus, InterviewRound } from '@/types';
 
 interface SignalPage {
   id: string;
@@ -19,6 +21,8 @@ interface Job {
   role_title: string;
   company_name: string;
   status: string;
+  application_status: ApplicationStatus;
+  interview_rounds: InterviewRound[];
   created_at: string;
   signal_pages: SignalPage[];
 }
@@ -176,6 +180,7 @@ export function DashboardContent({ jobs, username }: DashboardContentProps) {
                           <span>{page.view_count} views</span>
                         </div>
                       )}
+                      <ApplicationStatusBadge status={job.application_status} />
                     </div>
                   </div>
 
@@ -230,6 +235,9 @@ export function DashboardContent({ jobs, username }: DashboardContentProps) {
                   Status
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  Application
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                   Match
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
@@ -260,6 +268,9 @@ export function DashboardContent({ jobs, username }: DashboardContentProps) {
                     </td>
                     <td className="whitespace-nowrap px-6 py-4">
                       {getStatusBadge(job.status)}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4">
+                      <ApplicationStatusBadge status={job.application_status} />
                     </td>
                     <td className="whitespace-nowrap px-6 py-4">
                       {page?.match_score !== undefined && page?.match_score !== null ? (
