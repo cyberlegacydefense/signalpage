@@ -88,12 +88,49 @@ export interface Job {
   seniority_level: SeniorityLevel;
   status: JobStatus;
   parsed_requirements?: ParsedJobRequirements;
+  // Application tracking
+  application_status?: ApplicationStatus;
+  interview_rounds?: InterviewRound[];
+  applied_at?: string;
+  rejected_at?: string;
+  offer_received_at?: string;
   created_at: string;
   updated_at: string;
 }
 
 export type SeniorityLevel = 'entry' | 'mid' | 'senior' | 'staff' | 'principal' | 'director' | 'vp' | 'c_level';
 export type JobStatus = 'draft' | 'generating' | 'published' | 'archived';
+
+// Application tracking types
+export type ApplicationStatus =
+  | 'not_applied'
+  | 'applied'
+  | 'interview_scheduled'
+  | 'interviewing'
+  | 'offer_received'
+  | 'rejected'
+  | 'withdrawn'
+  | 'accepted';
+
+export type InterviewType =
+  | 'recruiter'
+  | 'hiring_manager'
+  | 'technical'
+  | 'panel'
+  | 'executive'
+  | 'hr_culture'
+  | 'other';
+
+export type InterviewOutcome = 'passed' | 'pending' | 'rejected';
+
+export interface InterviewRound {
+  round: number;
+  type: InterviewType;
+  scheduled_at?: string;
+  completed_at?: string;
+  notes?: string;
+  outcome?: InterviewOutcome;
+}
 
 export interface ParsedJobRequirements {
   responsibilities: string[];

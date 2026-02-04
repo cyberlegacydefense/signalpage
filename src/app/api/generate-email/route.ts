@@ -2,13 +2,12 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getLLMClient } from '@/lib/llm';
 import { buildGenerationContext } from '@/lib/llm/prompts';
-import type { GenerationContext } from '@/types';
+import type { GenerationContext, InterviewType } from '@/types';
 
 export const maxDuration = 60;
 
 // Email type definitions
 type EmailType = 'cover_letter' | 'thank_you' | 'follow_up' | 'offer_discussion';
-type InterviewType = 'recruiter' | 'hiring_manager' | 'technical' | 'panel' | 'executive' | 'hr_culture' | 'other';
 
 interface GenerateEmailRequest {
   jobId: string;

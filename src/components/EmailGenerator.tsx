@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
 import { Document, Packer, Paragraph, TextRun, AlignmentType } from 'docx';
+import type { InterviewType } from '@/types';
 
 interface EmailGeneratorProps {
   jobId: string;
@@ -10,7 +11,6 @@ interface EmailGeneratorProps {
 }
 
 type EmailType = 'cover_letter' | 'thank_you' | 'follow_up' | 'offer_discussion';
-type InterviewType = 'recruiter' | 'hiring_manager' | 'technical' | 'panel' | 'executive' | 'hr_culture' | 'other';
 
 interface EmailRecord {
   id: string;
