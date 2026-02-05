@@ -3,6 +3,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { createClient } from '@/lib/supabase/server';
 import { SignOutButton } from '@/components/SignOutButton';
+import { VersionChecker } from '@/components/VersionChecker';
 
 // Force dynamic rendering - don't try to prerender at build time
 export const dynamic = 'force-dynamic';
@@ -146,6 +147,9 @@ export default async function DashboardLayout({
           </div>
         </div>
       </footer>
+
+      {/* Version update notification */}
+      <VersionChecker />
     </div>
   );
 }
