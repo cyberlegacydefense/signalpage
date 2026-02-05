@@ -16,22 +16,55 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get all user's signal pages with job info
-    const { data: pages, error: pagesError } = await supabase
-      .from('signal_pages')
+    // Get all user's jobs with their signal pages (same approach as My Pages dashboard)
+    // This ensures 1:1 alignment between My Pages and Analytics
+    const { data: jobs, error: jobsError } = await supabase
+      .from('jobs')
       .select(`
         id,
-        slug,
-        is_published,
-        generated_at,
-        jobs (
+        company_name,
+        role_title,
+        application_status,
+        signal_pages (
           id,
-          company_name,
-          role_title,
-          application_status
+          slug,
+          is_published,
+          generated_at
         )
       `)
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (jobsError) {
+      console.error('Error fetching jobs:', jobsError);
+      return NextResponse.json({ error: 'Failed to fetch jobs' }, { status: 500 });
+    }
+
+    // Transform to pages format, only including jobs with signal pages
+    // Each job should have at most one signal page displayed
+    const pages = (jobs || [])
+      .filter(job => job.signal_pages && Array.isArray(job.signal_pages) && job.signal_pages.length > 0)
+      .map(job => {
+        const signalPages = job.signal_pages as Array<{ id: string; slug: string; is_published: boolean; generated_at: string }>;
+        // Take the most recent signal page for this job
+        const page = signalPages.sort((a, b) =>
+          new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime()
+        )[0];
+        return {
+          id: page.id,
+          slug: page.slug,
+          is_published: page.is_published,
+          generated_at: page.generated_at,
+          job: {
+            id: job.id,
+            company_name: job.company_name,
+            role_title: job.role_title,
+            application_status: job.application_status || 'not_applied',
+          }
+        };
+      });
+
+    const pagesError = null; // For compatibility with existing error handling
 
     if (pagesError) {
       console.error('Error fetching pages:', pagesError);
@@ -183,13 +216,11 @@ export async function GET() {
         highEngagementCount: 0, // Simplified for per-page
       });
 
-      // Supabase returns joins as arrays, get first element
-      const jobsData = page.jobs as Array<{ id: string; company_name: string; role_title: string; application_status: string }> | null;
-      const job = Array.isArray(jobsData) && jobsData.length > 0 ? jobsData[0] : null;
+      const job = page.job;
 
       return {
         pageId: page.id,
-        pageName: job ? `${job.role_title} @ ${job.company_name}` : page.slug,
+        pageName: `${job.role_title} @ ${job.company_name}`,
         views: stats.views,
         uniqueVisitors: stats.uniqueVisitors.size,
         avgTimeOnPage: avgTime,
@@ -198,7 +229,7 @@ export async function GET() {
         lastViewAt: stats.lastViewAt,
         isStale: stats.lastViewAt ? new Date(stats.lastViewAt) < sevenDaysAgo : true,
         isPublished: page.is_published,
-        applicationStatus: job?.application_status || 'not_applied',
+        applicationStatus: job.application_status,
       };
     }).sort((a, b) => b.views - a.views);
 
@@ -237,10 +268,7 @@ export async function GET() {
     };
 
     for (const page of pages) {
-      // Supabase returns joins as arrays, get first element
-      const jobsData = page.jobs as Array<{ application_status: string }> | null;
-      const job = Array.isArray(jobsData) && jobsData.length > 0 ? jobsData[0] : null;
-      const status = job?.application_status || 'not_applied';
+      const status = page.job.application_status;
 
       switch (status) {
         case 'not_applied':
