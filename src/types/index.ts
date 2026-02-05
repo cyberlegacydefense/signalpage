@@ -88,6 +88,9 @@ export interface Job {
   seniority_level: SeniorityLevel;
   status: JobStatus;
   parsed_requirements?: ParsedJobRequirements;
+  // Recruiter info
+  recruiter_name?: string;
+  hiring_manager_name?: string;
   // Application tracking
   application_status?: ApplicationStatus;
   interview_rounds?: InterviewRound[];
@@ -100,6 +103,7 @@ export interface Job {
 
 export type SeniorityLevel = 'entry' | 'mid' | 'senior' | 'staff' | 'principal' | 'director' | 'vp' | 'c_level';
 export type JobStatus = 'draft' | 'generating' | 'published' | 'archived';
+export type GenerationStatus = 'generating' | 'ready' | 'failed';
 
 // Application tracking types
 export type ApplicationStatus =
@@ -147,6 +151,10 @@ export interface SignalPage {
   user_id: string;
   slug: string;
   is_published: boolean;
+
+  // Generation status for optimistic UI
+  generation_status?: GenerationStatus;
+  generation_error?: string;
 
   // Generated content sections
   hero: HeroSection;

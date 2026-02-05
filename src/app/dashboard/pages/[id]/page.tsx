@@ -23,6 +23,7 @@ import type {
   MatchBreakdown,
   ApplicationStatus,
   InterviewRound,
+  GenerationStatus,
 } from '@/types';
 
 interface PageProps {
@@ -80,6 +81,9 @@ export default function PageEditorPage({ params }: PageProps) {
   const [subscriptionTier, setSubscriptionTier] = useState<string>('free');
   const [jobId, setJobId] = useState<string | null>(null);
   const [resumeLinkCopied, setResumeLinkCopied] = useState(false);
+  const [generationStatus, setGenerationStatus] = useState<GenerationStatus>('ready');
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   useEffect(() => {
     async function loadPage() {
@@ -127,7 +131,35 @@ export default function PageEditorPage({ params }: PageProps) {
       setPage(data as PageData);
       setShowAICommentary(data.show_ai_commentary !== false);
       setJobId(data.job_id);
+      setGenerationStatus(data.generation_status || 'ready');
+      setGenerationError(data.generation_error || null);
       setIsLoading(false);
+
+      // Subscribe to real-time updates for this page
+      const channel = supabase
+        .channel(`page-${pageId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'signal_pages',
+            filter: `id=eq.${pageId}`,
+          },
+          (payload) => {
+            console.log('[Real-time] Page updated:', payload);
+            const newData = payload.new as PageData;
+            setPage((prev) => prev ? { ...prev, ...newData } : null);
+            setGenerationStatus(newData.generation_status || 'ready');
+            setGenerationError(newData.generation_error || null);
+          }
+        )
+        .subscribe();
+
+      // Cleanup subscription on unmount
+      return () => {
+        supabase.removeChannel(channel);
+      };
 
       // Load analytics
       const { data: analyticsData } = await supabase
@@ -632,10 +664,136 @@ export default function PageEditorPage({ params }: PageProps) {
     setEditedCommentary(null);
   };
 
+  // Retry generation
+  const handleRetryGeneration = async () => {
+    if (!page || !jobId) return;
+
+    setIsRetrying(true);
+    setGenerationError(null);
+
+    try {
+      const response = await fetch('/api/generate-page', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to start generation');
+      }
+
+      // Generation started - status will update via real-time subscription
+      setGenerationStatus('generating');
+    } catch (err) {
+      console.error('Retry generation error:', err);
+      setGenerationError(err instanceof Error ? err.message : 'Failed to retry generation');
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+
   if (isLoading || !page) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+      </div>
+    );
+  }
+
+  // Show generating state
+  if (generationStatus === 'generating') {
+    return (
+      <div className="mx-auto max-w-4xl">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-gray-900">
+            {page.jobs?.role_title || 'New Page'} @ {page.jobs?.company_name || 'Company'}
+          </h1>
+          <div className="mt-2">
+            <Badge variant="warning">Generating</Badge>
+          </div>
+        </div>
+
+        <Card className="mb-6">
+          <CardContent className="py-12">
+            <div className="flex flex-col items-center justify-center text-center">
+              <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                Generating Your Signal Page
+              </h2>
+              <p className="text-gray-600 max-w-md">
+                Our AI is analyzing the job description and your resume to create a personalized page.
+                This usually takes 30-60 seconds.
+              </p>
+              <div className="mt-6 space-y-2 text-sm text-gray-500">
+                <p className="flex items-center gap-2">
+                  <svg className="h-4 w-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Analyzing job requirements
+                </p>
+                <p className="flex items-center gap-2">
+                  <svg className="h-4 w-4 animate-pulse text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" strokeWidth="2" />
+                  </svg>
+                  Matching your experience
+                </p>
+                <p className="flex items-center gap-2 text-gray-400">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" strokeWidth="2" />
+                  </svg>
+                  Crafting personalized content
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show failed state
+  if (generationStatus === 'failed') {
+    return (
+      <div className="mx-auto max-w-4xl">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-gray-900">
+            {page.jobs?.role_title || 'New Page'} @ {page.jobs?.company_name || 'Company'}
+          </h1>
+          <div className="mt-2">
+            <Badge variant="warning">Generation Failed</Badge>
+          </div>
+        </div>
+
+        <Card className="mb-6 border-red-200">
+          <CardContent className="py-12">
+            <div className="flex flex-col items-center justify-center text-center">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+                <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                Generation Failed
+              </h2>
+              <p className="text-gray-600 max-w-md mb-2">
+                We encountered an error while generating your Signal Page.
+              </p>
+              {generationError && (
+                <p className="text-sm text-red-600 mb-4 max-w-md">
+                  {generationError}
+                </p>
+              )}
+              <Button
+                variant="primary"
+                onClick={handleRetryGeneration}
+                isLoading={isRetrying}
+              >
+                {isRetrying ? 'Retrying...' : 'Try Again'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }

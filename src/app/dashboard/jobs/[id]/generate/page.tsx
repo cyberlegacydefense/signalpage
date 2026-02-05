@@ -12,7 +12,7 @@ interface PageProps {
 export default function GeneratePage({ params }: PageProps) {
   const { id: jobId } = use(params);
   const router = useRouter();
-  const [status, setStatus] = useState<'checking' | 'ready' | 'generating' | 'complete' | 'error'>('checking');
+  const [status, setStatus] = useState<'checking' | 'ready' | 'generating' | 'error'>('checking');
   const [error, setError] = useState('');
   const [job, setJob] = useState<{ company_name: string; role_title: string } | null>(null);
 
@@ -122,11 +122,6 @@ export default function GeneratePage({ params }: PageProps) {
       });
 
       if (!response.ok) {
-        // Handle gateway timeouts (504) which return HTML instead of JSON
-        if (response.status === 504) {
-          throw new Error('Generation timed out. This can happen with complex job descriptions. Please try again.');
-        }
-
         // Try to parse JSON error, but handle HTML error pages gracefully
         let errorMessage = 'Failed to generate page';
         try {
@@ -142,12 +137,10 @@ export default function GeneratePage({ params }: PageProps) {
       }
 
       const { page } = await response.json();
-      setStatus('complete');
 
-      // Redirect to the page editor
-      setTimeout(() => {
-        router.push(`/dashboard/pages/${page.id}`);
-      }, 1500);
+      // Redirect immediately to the page editor
+      // The page editor will show a generating state with real-time updates
+      router.push(`/dashboard/pages/${page.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
       setStatus('error');
@@ -236,35 +229,11 @@ export default function GeneratePage({ params }: PageProps) {
             <>
               <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
               <h2 className="mb-2 text-lg font-medium text-gray-900">
-                Generating your Signal Page...
+                Starting generation...
               </h2>
               <p className="text-sm text-gray-500">
-                This typically takes 30-60 seconds
+                Redirecting to your page editor
               </p>
-            </>
-          )}
-
-          {status === 'complete' && (
-            <>
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                <svg
-                  className="h-8 w-8 text-green-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              </div>
-              <h2 className="mb-2 text-xl font-semibold text-gray-900">
-                Page Generated!
-              </h2>
-              <p className="text-gray-600">Redirecting to your page editor...</p>
             </>
           )}
 
