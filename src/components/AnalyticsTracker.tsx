@@ -2,9 +2,8 @@
 
 import { useEffect, useRef } from 'react';
 import {
-  generateVisitorFingerprint,
   sendEnhancedAnalytics,
-  setupEngagementTracking,
+  setupFullTracking,
 } from '@/lib/analytics/visitor-fingerprint';
 
 interface AnalyticsTrackerProps {
@@ -17,6 +16,7 @@ interface AnalyticsTrackerProps {
  * Handles:
  * - Enhanced page view tracking with fingerprint
  * - Engagement scoring (time on page)
+ * - Scroll depth tracking
  * - Return visitor detection
  */
 export function AnalyticsTracker({ pageId, isOwner }: AnalyticsTrackerProps) {
@@ -33,8 +33,8 @@ export function AnalyticsTracker({ pageId, isOwner }: AnalyticsTrackerProps) {
     // Send enhanced page view with fingerprint
     sendEnhancedAnalytics(pageId, 'page_view');
 
-    // Setup engagement tracking (2+ minutes = high engagement)
-    const cleanup = setupEngagementTracking(pageId, 120);
+    // Setup full tracking (time on page + scroll depth + high engagement)
+    const cleanup = setupFullTracking(pageId, 120);
 
     return () => {
       cleanup();

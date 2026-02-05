@@ -8,7 +8,7 @@ const HIGH_ENGAGEMENT_THRESHOLD = 120;
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { pageId, eventType, sectionId, metadata, visitorFingerprint, timeOnPage } = body;
+    const { pageId, eventType, sectionId, metadata, visitorFingerprint, timeOnPage, scrollDepth } = body;
 
     if (!pageId || !eventType) {
       return NextResponse.json(
@@ -108,6 +108,7 @@ export async function POST(request: Request) {
       visitor_hash: visitorHash,
       is_return_visitor: isReturnVisitor,
       time_on_page: timeOnPage || null,
+      scroll_depth: scrollDepth || null,
       screen_resolution: (visitorFingerprint as VisitorFingerprint)?.screen_resolution || null,
       timezone: (visitorFingerprint as VisitorFingerprint)?.timezone || null,
       language: (visitorFingerprint as VisitorFingerprint)?.language || null,

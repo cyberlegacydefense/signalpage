@@ -574,3 +574,55 @@ export interface EnhancedAnalyticsEvent {
   visitorFingerprint?: VisitorFingerprint;
   timeOnPage?: number;
 }
+
+// =============================================================================
+// PORTFOLIO ANALYTICS
+// =============================================================================
+
+export interface PortfolioSummary {
+  totalViews: number;
+  uniqueVisitors: number;
+  returnVisitors: number;
+  avgTimeOnPage: number;
+  avgScrollDepth: number;
+  returnVisitorRate: number;
+  engagementScore: number;
+}
+
+export interface PageRanking {
+  pageId: string;
+  pageName: string;
+  views: number;
+  uniqueVisitors: number;
+  avgTimeOnPage: number;
+  avgScrollDepth: number;
+  engagementScore: number;
+  lastViewAt: string | null;
+  isStale: boolean;
+  isPublished: boolean;
+  applicationStatus: ApplicationStatus;
+}
+
+export interface TrendDataPoint {
+  date: string;
+  views: number;
+  uniqueVisitors: number;
+}
+
+export interface ApplicationBreakdown {
+  notApplied: number;
+  applied: number;
+  interviewing: number;
+  offerReceived: number;
+  rejected: number;
+}
+
+export interface PortfolioAnalytics {
+  summary: PortfolioSummary;
+  pageRankings: PageRanking[];
+  trends: {
+    daily: TrendDataPoint[];
+    weekly?: TrendDataPoint[];
+  };
+  applicationBreakdown: ApplicationBreakdown;
+}

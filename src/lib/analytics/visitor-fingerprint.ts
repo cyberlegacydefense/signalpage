@@ -116,6 +116,7 @@ export async function sendEnhancedAnalytics(
     sectionId?: string;
     metadata?: Record<string, unknown>;
     timeOnPage?: number;
+    scrollDepth?: number;
   }
 ): Promise<void> {
   const fingerprint = generateVisitorFingerprint();
@@ -131,6 +132,7 @@ export async function sendEnhancedAnalytics(
         metadata: options?.metadata,
         visitorFingerprint: fingerprint,
         timeOnPage: options?.timeOnPage,
+        scrollDepth: options?.scrollDepth,
       }),
     });
   } catch (error) {
@@ -187,6 +189,142 @@ export function setupEngagementTracking(
   // Return cleanup function
   return () => {
     clearInterval(intervalId);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('beforeunload', handleUnload);
+    }
+  };
+}
+
+/**
+ * Simple throttle function
+ */
+function throttle<T extends (...args: unknown[]) => void>(
+  func: T,
+  limit: number
+): (...args: Parameters<T>) => void {
+  let inThrottle = false;
+  return (...args: Parameters<T>) => {
+    if (!inThrottle) {
+      func(...args);
+      inThrottle = true;
+      setTimeout(() => {
+        inThrottle = false;
+      }, limit);
+    }
+  };
+}
+
+/**
+ * Calculate current scroll depth as percentage
+ */
+function calculateScrollDepth(): number {
+  if (typeof window === 'undefined') return 0;
+  const scrollTop = window.scrollY || document.documentElement.scrollTop;
+  const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+  if (scrollHeight <= 0) return 100; // Page fits in viewport
+  return Math.min(100, Math.round((scrollTop / scrollHeight) * 100));
+}
+
+/**
+ * Track scroll depth on page
+ * Returns cleanup function and getter for max scroll depth
+ */
+export function setupScrollTracking(
+  pageId: string,
+  onMilestone?: (depth: number) => void
+): { cleanup: () => void; getMaxScrollDepth: () => number } {
+  let maxScrollDepth = 0;
+  let lastReportedMilestone = 0;
+  const milestones = [25, 50, 75, 100];
+
+  const handleScroll = throttle(() => {
+    const currentDepth = calculateScrollDepth();
+    if (currentDepth > maxScrollDepth) {
+      maxScrollDepth = currentDepth;
+
+      // Report at milestones
+      for (const milestone of milestones) {
+        if (maxScrollDepth >= milestone && lastReportedMilestone < milestone) {
+          lastReportedMilestone = milestone;
+          onMilestone?.(milestone);
+          // Optional: send milestone event (can be noisy, so commented out)
+          // sendEnhancedAnalytics(pageId, 'scroll_milestone', {
+          //   scrollDepth: milestone,
+          //   metadata: { milestone }
+          // });
+        }
+      }
+    }
+  }, 250);
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    // Check initial scroll position
+    handleScroll();
+  }
+
+  return {
+    cleanup: () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('scroll', handleScroll);
+      }
+    },
+    getMaxScrollDepth: () => maxScrollDepth,
+  };
+}
+
+/**
+ * Combined engagement and scroll tracking
+ * Sends both time on page and scroll depth on page leave
+ */
+export function setupFullTracking(
+  pageId: string,
+  engagementThreshold: number = 120
+): () => void {
+  const timeTracker = createTimeTracker();
+  const scrollTracker = setupScrollTracking(pageId);
+  let hasSentEngagement = false;
+
+  const checkEngagement = () => {
+    if (hasSentEngagement) return;
+
+    const timeOnPage = timeTracker.getTimeOnPage();
+    if (timeOnPage >= engagementThreshold) {
+      hasSentEngagement = true;
+      sendEnhancedAnalytics(pageId, 'high_engagement', {
+        timeOnPage,
+        scrollDepth: scrollTracker.getMaxScrollDepth(),
+        metadata: { threshold: engagementThreshold },
+      });
+    }
+  };
+
+  const intervalId = setInterval(checkEngagement, 30000);
+
+  const handleUnload = () => {
+    const timeOnPage = timeTracker.getTimeOnPage();
+    const scrollDepth = scrollTracker.getMaxScrollDepth();
+
+    if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+      const fingerprint = generateVisitorFingerprint();
+      const data = JSON.stringify({
+        pageId,
+        eventType: 'page_leave',
+        timeOnPage,
+        scrollDepth,
+        visitorFingerprint: fingerprint,
+      });
+      navigator.sendBeacon('/api/analytics', data);
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', handleUnload);
+  }
+
+  return () => {
+    clearInterval(intervalId);
+    scrollTracker.cleanup();
     if (typeof window !== 'undefined') {
       window.removeEventListener('beforeunload', handleUnload);
     }

@@ -10,6 +10,9 @@ import { InterviewPrep } from '@/components/InterviewPrep';
 import { EmailGenerator } from '@/components/EmailGenerator';
 import { ApplicationTracker } from '@/components/ApplicationTracker';
 import { hasCoachAccess } from '@/lib/stripe';
+import { calculateEngagementScore, computeEngagementMetrics } from '@/lib/analytics/engagement-score';
+import { formatTimeOnPage } from '@/lib/analytics/format-time';
+import { EngagementScore } from '@/components/analytics';
 import type {
   SignalPage,
   HeroSection,
@@ -53,6 +56,10 @@ export default function PageEditorPage({ params }: PageProps) {
   const [analytics, setAnalytics] = useState<{
     totalViews: number;
     uniqueViews: number;
+    returnVisitors: number;
+    avgTimeOnPage: number;
+    avgScrollDepth: number;
+    engagementScore: number;
     firstViewAt: string | null;
     lastViewAt: string | null;
     publishedAt: string | null;
@@ -125,30 +132,77 @@ export default function PageEditorPage({ params }: PageProps) {
       // Load analytics
       const { data: analyticsData } = await supabase
         .from('page_analytics')
-        .select('id, created_at, is_owner_view')
+        .select('id, created_at, is_owner_view, is_return_visitor, time_on_page, scroll_depth, visitor_hash')
         .eq('page_id', pageId)
         .eq('event_type', 'page_view')
         .order('created_at', { ascending: true });
 
-      // Calculate total views (all) and unique views (non-owner)
+      // Calculate metrics from non-owner views
       const allViews = analyticsData || [];
       const nonOwnerViews = allViews.filter(
         (a: { is_owner_view: boolean | null }) =>
           a.is_owner_view !== true && a.is_owner_view !== ('true' as unknown as boolean)
       );
 
+      // Calculate unique visitors and return visitors
+      const uniqueVisitors = new Set(nonOwnerViews.map((a: { visitor_hash: string | null }) => a.visitor_hash).filter(Boolean)).size;
+      const returnVisitors = nonOwnerViews.filter((a: { is_return_visitor: boolean | null }) => a.is_return_visitor).length;
+
+      // Calculate averages
+      const timesOnPage = nonOwnerViews
+        .map((a: { time_on_page: number | null }) => a.time_on_page)
+        .filter((t: number | null): t is number => t !== null && t > 0);
+      const avgTimeOnPage = timesOnPage.length > 0
+        ? Math.round(timesOnPage.reduce((sum: number, t: number) => sum + t, 0) / timesOnPage.length)
+        : 0;
+
+      const scrollDepths = nonOwnerViews
+        .map((a: { scroll_depth: number | null }) => a.scroll_depth)
+        .filter((s: number | null): s is number => s !== null && s > 0);
+      const avgScrollDepth = scrollDepths.length > 0
+        ? Math.round(scrollDepths.reduce((sum: number, s: number) => sum + s, 0) / scrollDepths.length)
+        : 0;
+
+      // Get high engagement count
+      const { data: highEngagementData } = await supabase
+        .from('page_analytics')
+        .select('id')
+        .eq('page_id', pageId)
+        .eq('event_type', 'high_engagement')
+        .neq('is_owner_view', true);
+      const highEngagementCount = highEngagementData?.length || 0;
+
+      // Calculate engagement score
+      const metrics = computeEngagementMetrics({
+        totalViews: nonOwnerViews.length,
+        uniqueVisitors,
+        returnVisitors,
+        avgTimeOnPage,
+        avgScrollDepth,
+        highEngagementCount,
+      });
+      const engagementScore = calculateEngagementScore(metrics);
+
       if (nonOwnerViews.length > 0) {
         setAnalytics({
           totalViews: allViews.length,
           uniqueViews: nonOwnerViews.length,
+          returnVisitors,
+          avgTimeOnPage,
+          avgScrollDepth,
+          engagementScore,
           firstViewAt: nonOwnerViews[0].created_at,
           lastViewAt: nonOwnerViews[nonOwnerViews.length - 1].created_at,
-          publishedAt: data.generated_at, // Use page generation time as proxy for publish time
+          publishedAt: data.generated_at,
         });
       } else {
         setAnalytics({
           totalViews: allViews.length,
           uniqueViews: 0,
+          returnVisitors: 0,
+          avgTimeOnPage: 0,
+          avgScrollDepth: 0,
+          engagementScore: 0,
           firstViewAt: null,
           lastViewAt: null,
           publishedAt: data.generated_at,
@@ -1436,23 +1490,51 @@ export default function PageEditorPage({ params }: PageProps) {
               </p>
             ) : analytics && (analytics.uniqueViews > 0 || analytics.totalViews > 0) ? (
               <div className="space-y-4">
-                {/* Views - Two columns */}
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Unique Views (non-owner) */}
-                  <div className="rounded-lg bg-indigo-50 border border-indigo-200 p-4 text-center">
-                    <p className="text-3xl font-bold text-indigo-900">{analytics.uniqueViews}</p>
-                    <p className="mt-1 text-sm text-indigo-600">Unique Views</p>
+                {/* Main Stats - Three columns */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-lg bg-indigo-50 border border-indigo-200 p-3 text-center">
+                    <p className="text-2xl font-bold text-indigo-900">{analytics.uniqueViews}</p>
+                    <p className="mt-0.5 text-xs text-indigo-600">Views</p>
                   </div>
-                  {/* Total Views (including owner) */}
-                  <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 text-center">
-                    <p className="text-3xl font-bold text-gray-700">{analytics.totalViews}</p>
-                    <p className="mt-1 text-sm text-gray-500">Total Views</p>
+                  <div className="rounded-lg bg-purple-50 border border-purple-200 p-3 text-center">
+                    <p className="text-2xl font-bold text-purple-900">
+                      {analytics.avgTimeOnPage > 0 ? formatTimeOnPage(analytics.avgTimeOnPage) : '-'}
+                    </p>
+                    <p className="mt-0.5 text-xs text-purple-600">Avg Time</p>
+                  </div>
+                  <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-center">
+                    <p className="text-2xl font-bold text-blue-900">
+                      {analytics.avgScrollDepth > 0 ? `${analytics.avgScrollDepth}%` : '-'}
+                    </p>
+                    <p className="mt-0.5 text-xs text-blue-600">Scroll Depth</p>
+                  </div>
+                </div>
+
+                {/* Return Visitors & Engagement Score */}
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      <span className="text-sm text-gray-700">
+                        <span className="font-semibold">{analytics.returnVisitors}</span> return visitors
+                        {analytics.uniqueViews > 0 && (
+                          <span className="text-gray-500"> ({Math.round((analytics.returnVisitors / analytics.uniqueViews) * 100)}%)</span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium text-gray-600">Engagement Score</span>
+                    </div>
+                    <EngagementScore score={analytics.engagementScore} size="sm" />
                   </div>
                 </div>
 
                 {/* Time to First View & Last Viewed */}
                 <div className="grid grid-cols-2 gap-3">
-                  {/* Time to First View */}
                   <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
                     <div className="flex items-center gap-2 mb-1">
                       <svg className="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1466,8 +1548,6 @@ export default function PageEditorPage({ params }: PageProps) {
                         : 'N/A'}
                     </p>
                   </div>
-
-                  {/* Last Viewed */}
                   <div className="rounded-lg border border-green-200 bg-green-50 p-3">
                     <div className="flex items-center gap-2 mb-1">
                       <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1484,7 +1564,7 @@ export default function PageEditorPage({ params }: PageProps) {
                 </div>
 
                 <p className="text-xs text-gray-400 text-center">
-                  Unique views exclude your own visits
+                  Analytics exclude your own visits
                 </p>
               </div>
             ) : (
