@@ -136,7 +136,19 @@ export default function GeneratePage({ params }: PageProps) {
         throw new Error(errorMessage);
       }
 
-      const { page } = await response.json();
+      // Read the streaming response - get the first chunk which has the page info
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      const { value } = await reader.read();
+      const text = new TextDecoder().decode(value);
+      const { page } = JSON.parse(text);
+
+      // Don't wait for the rest of the stream - redirect immediately
+      // The generation continues on the server and updates via real-time
+      reader.cancel();
 
       // Redirect immediately to the page editor
       // The page editor will show a generating state with real-time updates

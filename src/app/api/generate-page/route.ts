@@ -7,6 +7,9 @@ import { calculateMatchScore } from '@/lib/utils/match-score';
 import { hasProAccess } from '@/lib/stripe';
 import type { GenerationContext, ParsedResume, Job, User, HeroSection, FitSection, HighlightSection, Plan306090, CaseStudy } from '@/types';
 
+// Extend timeout for Netlify Pro (60 seconds)
+export const maxDuration = 60;
+
 // Placeholder content for the generating state
 const placeholderHero: HeroSection = {
   tagline: 'Generating...',
@@ -258,29 +261,45 @@ export async function POST(request: Request) {
       pageSlug = page.slug;
     }
 
-    // Start background generation (fire and forget - don't await)
-    // This runs after we return the response
-    runBackgroundGeneration(
-      pageId,
-      jobId,
-      user.id,
-      job as Job,
-      { parsed_data: resume.parsed_data as ParsedResume },
-      {
-        full_name: profile.full_name,
-        headline: profile.headline,
-        about_me: profile.about_me,
-        subscription_tier: profile.subscription_tier,
-      }
-    ).catch(err => {
-      // This should never happen since runBackgroundGeneration handles its own errors
-      console.error('[Generation] Unexpected error in background generation:', err);
+    // Use streaming to return page ID immediately, then continue generation
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        // Send page info immediately so client can redirect
+        controller.enqueue(encoder.encode(JSON.stringify({
+          page: { id: pageId, slug: pageSlug },
+          generating: true,
+        })));
+
+        // Now run the generation (this keeps the connection open)
+        try {
+          await runBackgroundGeneration(
+            pageId,
+            jobId,
+            user.id,
+            job as Job,
+            { parsed_data: resume.parsed_data as ParsedResume },
+            {
+              full_name: profile.full_name,
+              headline: profile.headline,
+              about_me: profile.about_me,
+              subscription_tier: profile.subscription_tier,
+            }
+          );
+        } catch (err) {
+          console.error('[Generation] Stream generation error:', err);
+          // Error is already handled in runBackgroundGeneration
+        }
+
+        controller.close();
+      },
     });
 
-    // Return immediately with the page info
-    return NextResponse.json({
-      page: { id: pageId, slug: pageSlug },
-      generating: true,
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Transfer-Encoding': 'chunked',
+      },
     });
   } catch (error) {
     console.error('Error initiating page generation:', error);
