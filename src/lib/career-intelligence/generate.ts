@@ -15,10 +15,19 @@ import type {
 
 // Helper to extract JSON from LLM response
 function extractJSON(content: string): string {
+  // First try: JSON in code blocks
   const jsonBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (jsonBlockMatch) {
     return jsonBlockMatch[1].trim();
   }
+
+  // Second try: Find JSON object that starts with { and ends with }
+  // This handles cases where LLM adds explanatory text before/after JSON
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    return jsonMatch[0].trim();
+  }
+
   return content.trim();
 }
 
