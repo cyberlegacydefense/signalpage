@@ -261,45 +261,12 @@ export async function POST(request: Request) {
       pageSlug = page.slug;
     }
 
-    // Use streaming to return page ID immediately, then continue generation
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      async start(controller) {
-        // Send page info immediately so client can redirect
-        controller.enqueue(encoder.encode(JSON.stringify({
-          page: { id: pageId, slug: pageSlug },
-          generating: true,
-        })));
-
-        // Now run the generation (this keeps the connection open)
-        try {
-          await runBackgroundGeneration(
-            pageId,
-            jobId,
-            user.id,
-            job as Job,
-            { parsed_data: resume.parsed_data as ParsedResume },
-            {
-              full_name: profile.full_name,
-              headline: profile.headline,
-              about_me: profile.about_me,
-              subscription_tier: profile.subscription_tier,
-            }
-          );
-        } catch (err) {
-          console.error('[Generation] Stream generation error:', err);
-          // Error is already handled in runBackgroundGeneration
-        }
-
-        controller.close();
-      },
-    });
-
-    return new Response(stream, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Transfer-Encoding': 'chunked',
-      },
+    // Return the page info immediately
+    // Generation will be triggered by a separate call from the page editor
+    return NextResponse.json({
+      page: { id: pageId, slug: pageSlug },
+      jobId: jobId,
+      generating: true,
     });
   } catch (error) {
     console.error('Error initiating page generation:', error);

@@ -156,6 +156,18 @@ export default function PageEditorPage({ params }: PageProps) {
         )
         .subscribe();
 
+      // If page is in generating status, trigger the actual generation
+      if (data.generation_status === 'generating') {
+        console.log('[Generation] Page is generating, triggering generation...');
+        fetch('/api/generate-page/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pageId, jobId: data.job_id }),
+        }).catch(err => {
+          console.error('[Generation] Failed to trigger generation:', err);
+        });
+      }
+
       // Cleanup subscription on unmount
       return () => {
         supabase.removeChannel(channel);
