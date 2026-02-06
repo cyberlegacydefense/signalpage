@@ -100,14 +100,17 @@ export default function GeneratePage({ params }: PageProps) {
         .maybeSingle();
 
       if (existingPage) {
-        // If page is generating or failed, go to My Pages to see status
-        if (existingPage.generation_status === 'generating' || existingPage.generation_status === 'failed') {
+        // If page is actively generating, go to My Pages to see progress
+        if (existingPage.generation_status === 'generating') {
           router.push('/dashboard');
           return;
         }
-        // If page is ready, go to the page editor
-        router.push(`/dashboard/pages/${existingPage.id}`);
-        return;
+        // If page is ready (or null for old pages), go to the page editor
+        if (existingPage.generation_status === 'ready' || !existingPage.generation_status) {
+          router.push(`/dashboard/pages/${existingPage.id}`);
+          return;
+        }
+        // If page failed, allow retry - continue to show "Ready to Generate" screen
       }
 
       setStatus('ready');

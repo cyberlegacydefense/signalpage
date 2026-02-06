@@ -168,8 +168,8 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (existingPage) {
-      // If page exists and is ready, redirect to it
-      if (existingPage.generation_status === 'ready') {
+      // If page exists and is ready (or null for old pages), redirect to it
+      if (existingPage.generation_status === 'ready' || !existingPage.generation_status) {
         return NextResponse.json({
           page: { id: existingPage.id, slug: existingPage.slug },
           jobId: jobId,
