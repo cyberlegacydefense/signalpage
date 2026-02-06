@@ -16,6 +16,11 @@ function getBuildId(): string {
     // Ignore errors reading BUILD_ID
   }
 
+  // Fall back to Netlify's commit SHA
+  if (process.env.COMMIT_REF) {
+    return process.env.COMMIT_REF.slice(0, 7);
+  }
+
   // Fall back to Vercel's git commit SHA
   if (process.env.VERCEL_GIT_COMMIT_SHA) {
     return process.env.VERCEL_GIT_COMMIT_SHA.slice(0, 7);
