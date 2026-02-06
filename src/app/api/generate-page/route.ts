@@ -159,6 +159,65 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Job ID is required' }, { status: 400 });
     }
 
+    // Check if a page already exists for this job
+    const { data: existingPage } = await supabase
+      .from('signal_pages')
+      .select('id, slug, generation_status')
+      .eq('job_id', jobId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (existingPage) {
+      // If page exists and is ready, redirect to it
+      if (existingPage.generation_status === 'ready') {
+        return NextResponse.json({
+          page: { id: existingPage.id, slug: existingPage.slug },
+          jobId: jobId,
+          generating: false,
+          existing: true,
+        });
+      }
+
+      // If page exists and is generating, return it (don't create duplicate)
+      if (existingPage.generation_status === 'generating') {
+        return NextResponse.json({
+          page: { id: existingPage.id, slug: existingPage.slug },
+          jobId: jobId,
+          generating: true,
+          existing: true,
+        });
+      }
+
+      // If page failed, reset it to generating for retry
+      if (existingPage.generation_status === 'failed') {
+        const serviceSupabase = createServiceClient();
+        await serviceSupabase
+          .from('signal_pages')
+          .update({
+            generation_status: 'generating',
+            generation_error: null,
+            hero: placeholderHero,
+            fit_section: placeholderFitSection,
+            highlights: placeholderHighlights,
+            plan_30_60_90: placeholderPlan,
+            case_studies: placeholderCaseStudies,
+          })
+          .eq('id', existingPage.id);
+
+        await serviceSupabase
+          .from('jobs')
+          .update({ status: 'generating' })
+          .eq('id', jobId);
+
+        return NextResponse.json({
+          page: { id: existingPage.id, slug: existingPage.slug },
+          jobId: jobId,
+          generating: true,
+          retry: true,
+        });
+      }
+    }
+
     // Get the job
     const { data: job, error: jobError } = await supabase
       .from('jobs')
@@ -206,7 +265,7 @@ export async function POST(request: Request) {
       .update({ status: 'generating' })
       .eq('id', jobId);
 
-    // Create the signal page immediately with placeholder content
+    // Create the signal page with placeholder content
     const slug = generateSlug(job.company_name, job.role_title);
 
     let pageId: string;
@@ -262,7 +321,7 @@ export async function POST(request: Request) {
     }
 
     // Return the page info immediately
-    // Generation will be triggered by a separate call from the page editor
+    // Generation will be triggered by the dashboard
     return NextResponse.json({
       page: { id: pageId, slug: pageSlug },
       jobId: jobId,

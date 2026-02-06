@@ -92,14 +92,20 @@ export default function GeneratePage({ params }: PageProps) {
         return;
       }
 
-      // Check if page already exists
+      // Check if page already exists for this job
       const { data: existingPage } = await supabase
         .from('signal_pages')
-        .select('id')
+        .select('id, generation_status')
         .eq('job_id', jobId)
         .maybeSingle();
 
       if (existingPage) {
+        // If page is generating or failed, go to My Pages to see status
+        if (existingPage.generation_status === 'generating' || existingPage.generation_status === 'failed') {
+          router.push('/dashboard');
+          return;
+        }
+        // If page is ready, go to the page editor
         router.push(`/dashboard/pages/${existingPage.id}`);
         return;
       }
@@ -122,13 +128,11 @@ export default function GeneratePage({ params }: PageProps) {
       });
 
       if (!response.ok) {
-        // Try to parse JSON error, but handle HTML error pages gracefully
         let errorMessage = 'Failed to generate page';
         try {
           const data = await response.json();
           errorMessage = data.error || errorMessage;
         } catch {
-          // Response wasn't JSON (likely HTML error page)
           if (response.status >= 500) {
             errorMessage = 'Server error. Please try again in a moment.';
           }
@@ -136,23 +140,9 @@ export default function GeneratePage({ params }: PageProps) {
         throw new Error(errorMessage);
       }
 
-      // Read the streaming response - get the first chunk which has the page info
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('No response body');
-      }
-
-      const { value } = await reader.read();
-      const text = new TextDecoder().decode(value);
-      const { page } = JSON.parse(text);
-
-      // Don't wait for the rest of the stream - redirect immediately
-      // The generation continues on the server and updates via real-time
-      reader.cancel();
-
-      // Redirect immediately to the page editor
-      // The page editor will show a generating state with real-time updates
-      router.push(`/dashboard/pages/${page.id}`);
+      // Page created successfully - redirect to My Pages
+      // Generation will continue in the background
+      router.push('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
       setStatus('error');
@@ -197,40 +187,10 @@ export default function GeneratePage({ params }: PageProps) {
                 <strong>{job.company_name}</strong>
               </p>
               <p className="mb-8 text-sm text-gray-500">
-                Our AI will analyze the job description and your resume to create:
+                Our AI will analyze the job description and your resume to create a personalized page.
+                This typically takes 30-60 seconds. You&apos;ll be redirected to My Pages where you can
+                track the progress.
               </p>
-              <ul className="mb-8 space-y-2 text-left text-sm text-gray-600">
-                <li className="flex items-center">
-                  <svg className="mr-2 h-4 w-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                  A compelling hero section with your value proposition
-                </li>
-                <li className="flex items-center">
-                  <svg className="mr-2 h-4 w-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                  &quot;Why I&apos;m a fit&quot; bullets mapped to job requirements
-                </li>
-                <li className="flex items-center">
-                  <svg className="mr-2 h-4 w-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                  Relevant career highlights with impact metrics
-                </li>
-                <li className="flex items-center">
-                  <svg className="mr-2 h-4 w-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                  A custom 30/60/90 day plan for this role
-                </li>
-                <li className="flex items-center">
-                  <svg className="mr-2 h-4 w-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                  Relevant case studies from your background
-                </li>
-              </ul>
               <Button variant="primary" size="lg" onClick={handleGenerate}>
                 Generate My Signal Page
               </Button>
@@ -244,7 +204,7 @@ export default function GeneratePage({ params }: PageProps) {
                 Starting generation...
               </h2>
               <p className="text-sm text-gray-500">
-                Redirecting to your page editor
+                Redirecting to My Pages
               </p>
             </>
           )}

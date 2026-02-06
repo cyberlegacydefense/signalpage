@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Button, Card, CardContent, Badge } from '@/components/ui';
 import { ApplicationStatusBadge } from '@/components/ApplicationTracker';
 import { formatDistanceToNow } from 'date-fns';
-import type { ApplicationStatus, InterviewRound } from '@/types';
+import { createClient } from '@/lib/supabase/client';
+import type { ApplicationStatus, InterviewRound, GenerationStatus } from '@/types';
 
 interface SignalPage {
   id: string;
@@ -14,6 +15,8 @@ interface SignalPage {
   generated_at: string;
   match_score: number | null;
   view_count: number;
+  generation_status: GenerationStatus | null;
+  generation_error: string | null;
 }
 
 interface Job {
@@ -34,8 +37,95 @@ interface DashboardContentProps {
 
 type ViewMode = 'tile' | 'table';
 
-export function DashboardContent({ jobs, username }: DashboardContentProps) {
+export function DashboardContent({ jobs: initialJobs, username }: DashboardContentProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('tile');
+  const [jobs, setJobs] = useState(initialJobs);
+  const generationTriggeredRef = useRef<Set<string>>(new Set());
+
+  // Trigger generation for pages in 'generating' status
+  const triggerGeneration = useCallback(async (pageId: string, jobId: string) => {
+    // Prevent duplicate triggers
+    if (generationTriggeredRef.current.has(pageId)) return;
+    generationTriggeredRef.current.add(pageId);
+
+    try {
+      const response = await fetch('/api/generate-page/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId, jobId }),
+      });
+
+      if (!response.ok) {
+        console.error(`Generation failed for page ${pageId}`);
+      }
+    } catch (error) {
+      console.error(`Error triggering generation for page ${pageId}:`, error);
+    }
+  }, []);
+
+  // Trigger generation for pages in 'generating' status on initial load
+  useEffect(() => {
+    const generatingPages = initialJobs.flatMap(job =>
+      job.signal_pages
+        .filter(p => p.generation_status === 'generating')
+        .map(p => ({ pageId: p.id, jobId: job.id }))
+    );
+
+    // Trigger generation for each page
+    generatingPages.forEach(({ pageId, jobId }) => {
+      triggerGeneration(pageId, jobId);
+    });
+  }, [initialJobs, triggerGeneration]);
+
+  // Subscribe to real-time updates
+  useEffect(() => {
+    const supabase = createClient();
+
+    // Subscribe to signal_pages changes
+    const pageIds = initialJobs.flatMap(job => job.signal_pages.map(p => p.id));
+    if (pageIds.length === 0) return;
+
+    const channel = supabase
+      .channel('dashboard-pages')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'signal_pages',
+          filter: `id=in.(${pageIds.join(',')})`,
+        },
+        (payload) => {
+          const updated = payload.new as {
+            id: string;
+            generation_status: GenerationStatus;
+            generation_error: string | null;
+            match_score: number | null;
+          };
+
+          setJobs(prevJobs =>
+            prevJobs.map(job => ({
+              ...job,
+              signal_pages: job.signal_pages.map(page =>
+                page.id === updated.id
+                  ? {
+                      ...page,
+                      generation_status: updated.generation_status,
+                      generation_error: updated.generation_error,
+                      match_score: updated.match_score,
+                    }
+                  : page
+              ),
+            }))
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [initialJobs]);
 
   // Load saved view preference
   useEffect(() => {
@@ -51,12 +141,38 @@ export function DashboardContent({ jobs, username }: DashboardContentProps) {
     localStorage.setItem('dashboardViewMode', mode);
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, generationStatus?: GenerationStatus | null) => {
+    // If page is generating, show generating badge
+    if (generationStatus === 'generating') {
+      return (
+        <Badge variant="warning" className="flex items-center gap-1">
+          <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+          Generating
+        </Badge>
+      );
+    }
+
+    // If page generation failed, show error badge
+    if (generationStatus === 'failed') {
+      return <Badge variant="danger">Failed</Badge>;
+    }
+
     switch (status) {
       case 'published':
         return <Badge variant="success">Published</Badge>;
       case 'generating':
-        return <Badge variant="warning">Generating</Badge>;
+        return (
+          <Badge variant="warning" className="flex items-center gap-1">
+            <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            Generating
+          </Badge>
+        );
       case 'draft':
         return <Badge variant="default">Draft</Badge>;
       case 'archived':
@@ -157,6 +273,9 @@ export function DashboardContent({ jobs, username }: DashboardContentProps) {
             const pageUrl = page && username
               ? `/${username}/${page.slug}`
               : null;
+            const isGenerating = page?.generation_status === 'generating';
+            const isFailed = page?.generation_status === 'failed';
+            const isReady = page?.generation_status === 'ready' || (!page?.generation_status && page);
 
             return (
               <Card key={job.id} className="overflow-hidden">
@@ -169,9 +288,9 @@ export function DashboardContent({ jobs, username }: DashboardContentProps) {
                       <p className="text-sm text-gray-600">{job.company_name}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
-                      {getStatusBadge(job.status)}
-                      {getMatchScoreBadge(page?.match_score)}
-                      {page && (
+                      {getStatusBadge(job.status, page?.generation_status)}
+                      {isReady && getMatchScoreBadge(page?.match_score)}
+                      {isReady && page && (
                         <div className="flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 whitespace-nowrap">
                           <svg className="h-3 w-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -188,8 +307,31 @@ export function DashboardContent({ jobs, username }: DashboardContentProps) {
                     Created {formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}
                   </div>
 
+                  {/* Show error message for failed generation */}
+                  {isFailed && page?.generation_error && (
+                    <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+                      {page.generation_error}
+                    </div>
+                  )}
+
                   <div className="flex gap-2">
-                    {page ? (
+                    {isGenerating ? (
+                      <div className="flex-1 text-center py-2 text-sm text-gray-500">
+                        <div className="flex items-center justify-center gap-2">
+                          <svg className="h-4 w-4 animate-spin text-blue-600" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          Generating your page...
+                        </div>
+                      </div>
+                    ) : isFailed ? (
+                      <Link href={`/dashboard/jobs/${job.id}/generate`} className="flex-1">
+                        <Button variant="primary" className="w-full" size="sm">
+                          Retry Generation
+                        </Button>
+                      </Link>
+                    ) : page && isReady ? (
                       <>
                         <Link href={`/dashboard/pages/${page.id}`} className="flex-1">
                           <Button variant="outline" className="w-full" size="sm">
@@ -257,6 +399,9 @@ export function DashboardContent({ jobs, username }: DashboardContentProps) {
                 const pageUrl = page && username
                   ? `/${username}/${page.slug}`
                   : null;
+                const isGenerating = page?.generation_status === 'generating';
+                const isFailed = page?.generation_status === 'failed';
+                const isReady = page?.generation_status === 'ready' || (!page?.generation_status && page);
 
                 return (
                   <tr key={job.id} className="hover:bg-gray-50">
@@ -267,13 +412,15 @@ export function DashboardContent({ jobs, username }: DashboardContentProps) {
                       {job.company_name}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4">
-                      {getStatusBadge(job.status)}
+                      {getStatusBadge(job.status, page?.generation_status)}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4">
                       <ApplicationStatusBadge status={job.application_status} />
                     </td>
                     <td className="whitespace-nowrap px-6 py-4">
-                      {page?.match_score !== undefined && page?.match_score !== null ? (
+                      {isGenerating ? (
+                        <span className="text-gray-400">—</span>
+                      ) : page?.match_score !== undefined && page?.match_score !== null ? (
                         <span className={`font-medium ${
                           page.match_score >= 80 ? 'text-green-600' :
                           page.match_score >= 60 ? 'text-blue-600' :
@@ -286,14 +433,28 @@ export function DashboardContent({ jobs, username }: DashboardContentProps) {
                       )}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      {page ? page.view_count : '—'}
+                      {isReady && page ? page.view_count : '—'}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       {formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">
-                        {page ? (
+                        {isGenerating ? (
+                          <span className="flex items-center gap-1 text-sm text-gray-500">
+                            <svg className="h-4 w-4 animate-spin text-blue-600" viewBox="0 0 24 24" fill="none">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            Generating...
+                          </span>
+                        ) : isFailed ? (
+                          <Link href={`/dashboard/jobs/${job.id}/generate`}>
+                            <Button variant="primary" size="sm">
+                              Retry
+                            </Button>
+                          </Link>
+                        ) : page && isReady ? (
                           <>
                             <Link href={`/dashboard/pages/${page.id}`}>
                               <Button variant="outline" size="sm">

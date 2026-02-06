@@ -165,9 +165,10 @@ export async function POST(request: Request) {
 
     // Try to update the page status to failed
     try {
-      const { pageId } = await request.clone().json();
+      const { pageId, jobId } = await request.clone().json();
+      const serviceSupabase = createServiceClient();
+
       if (pageId) {
-        const serviceSupabase = createServiceClient();
         await serviceSupabase
           .from('signal_pages')
           .update({
@@ -175,6 +176,14 @@ export async function POST(request: Request) {
             generation_error: error instanceof Error ? error.message : 'Generation failed',
           })
           .eq('id', pageId);
+      }
+
+      if (jobId) {
+        // Reset job status
+        await serviceSupabase
+          .from('jobs')
+          .update({ status: 'draft' })
+          .eq('id', jobId);
       }
     } catch {
       // Ignore errors updating status

@@ -26,7 +26,9 @@ export default async function DashboardPage({
         slug,
         is_published,
         generated_at,
-        match_score
+        match_score,
+        generation_status,
+        generation_error
       )
     `)
     .eq('user_id', user!.id)
@@ -74,7 +76,7 @@ export default async function DashboardPage({
     application_status: job.application_status || 'not_applied',
     interview_rounds: job.interview_rounds || [],
     created_at: job.created_at,
-    signal_pages: (job.signal_pages || []).map((p: { id: string; slug: string; is_published: boolean; generated_at: string; match_score: number | null }) => ({
+    signal_pages: (job.signal_pages || []).map((p: { id: string; slug: string; is_published: boolean; generated_at: string; match_score: number | null; generation_status: string | null; generation_error: string | null }) => ({
       ...p,
       view_count: viewCounts[p.id] || 0,
     })),
