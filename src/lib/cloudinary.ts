@@ -22,7 +22,7 @@ export async function uploadAvatar(
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
-        folder: 'signalpage/avatars',
+        folder: 'signalpage/ProfileImage',
         public_id: userId,
         overwrite: true,
         resource_type: 'image',
