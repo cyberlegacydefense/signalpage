@@ -16,6 +16,7 @@ import {
   SuperpowerEditor,
   AvailabilityEditor,
   ProfileCardPreview,
+  AvatarUpload,
 } from '@/components/profile-card';
 import type { Superpower, Availability } from '@/types';
 
@@ -32,6 +33,7 @@ interface ProfileData {
 export default function ProfileCardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -69,6 +71,35 @@ export default function ProfileCardPage() {
       setError('Failed to load profile card data');
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function handleGenerate() {
+    setIsGenerating(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const response = await fetch('/api/profile-card/generate', {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to generate profile card');
+      }
+
+      // Update state with generated content
+      setPositioningStatement(data.positioning_statement || '');
+      setSuperpowers(data.superpowers || []);
+      setAvailability(data.availability || {});
+
+      setSuccess('Profile card generated! Review and edit as needed, then save.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate profile card');
+    } finally {
+      setIsGenerating(false);
     }
   }
 
@@ -128,6 +159,11 @@ export default function ProfileCardPage() {
     }
   }
 
+  function handleAvatarUpload(avatarUrl: string) {
+    setProfile((prev) => ({ ...prev, avatar_url: avatarUrl }));
+    setSuccess('Avatar uploaded successfully!');
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -140,13 +176,24 @@ export default function ProfileCardPage() {
     ? `${typeof window !== 'undefined' ? window.location.origin : ''}/${profile.username}`
     : null;
 
+  const hasContent = positioningStatement || superpowers.length > 0;
+
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Profile Card</h1>
-        <p className="mt-1 text-gray-600">
-          Create your permanent personal page that showcases who you are - beyond any specific job.
-        </p>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Profile Card</h1>
+          <p className="mt-1 text-gray-600">
+            Create your permanent personal page that showcases who you are - beyond any specific job.
+          </p>
+        </div>
+        <Button
+          variant={hasContent ? 'outline' : 'primary'}
+          onClick={handleGenerate}
+          isLoading={isGenerating}
+        >
+          {isGenerating ? 'Generating...' : hasContent ? 'Regenerate' : 'Generate My Profile Card'}
+        </Button>
       </div>
 
       {error && (
@@ -194,6 +241,23 @@ export default function ProfileCardPage() {
                   {profileCardEnabled ? 'Unpublish' : 'Publish'}
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Avatar Upload */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Profile Photo</CardTitle>
+              <CardDescription>
+                Add a professional photo to make your profile more personal
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AvatarUpload
+                currentAvatarUrl={profile.avatar_url}
+                fullName={profile.full_name}
+                onUploadComplete={handleAvatarUpload}
+              />
             </CardContent>
           </Card>
 
