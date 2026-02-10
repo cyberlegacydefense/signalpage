@@ -308,6 +308,79 @@ export interface ProfileInput {
   github_url?: string;
 }
 
+// =============================================================================
+// PROFILE CARD Types
+// =============================================================================
+
+export interface ProofPoint {
+  id: string;
+  title: string;
+  metric: string;
+  details?: string;
+}
+
+export interface Testimonial {
+  quote: string;
+  author: string;
+  author_title?: string;
+}
+
+export interface Superpower {
+  id: string;
+  title: string;
+  one_liner: string;
+  icon?: string;
+  pattern?: string;
+  proof_points: ProofPoint[];
+  testimonial?: Testimonial;
+}
+
+export type AvailabilityStatus = 'actively_looking' | 'open' | 'not_looking';
+export type StartDate = 'immediately' | '2_weeks' | '1_month' | 'flexible';
+
+export interface Availability {
+  status: AvailabilityStatus;
+  roles: string[];
+  locations: string[];
+  start_date: StartDate;
+}
+
+export interface ProfileCard {
+  positioning_statement?: string;
+  superpowers: Superpower[];
+  availability?: Availability;
+  calendar_link?: string;
+  profile_card_enabled: boolean;
+}
+
+export const SUPERPOWER_ICONS = [
+  { value: 'rocket', label: 'Rocket', emoji: '🚀' },
+  { value: 'lightning', label: 'Lightning', emoji: '⚡' },
+  { value: 'target', label: 'Target', emoji: '🎯' },
+  { value: 'chart', label: 'Chart', emoji: '📈' },
+  { value: 'puzzle', label: 'Puzzle', emoji: '🧩' },
+  { value: 'bulb', label: 'Light Bulb', emoji: '💡' },
+  { value: 'gear', label: 'Gear', emoji: '⚙️' },
+  { value: 'users', label: 'Team', emoji: '👥' },
+  { value: 'code', label: 'Code', emoji: '💻' },
+  { value: 'shield', label: 'Shield', emoji: '🛡️' },
+  { value: 'star', label: 'Star', emoji: '⭐' },
+  { value: 'fire', label: 'Fire', emoji: '🔥' },
+] as const;
+
+export const AVAILABILITY_STATUS_OPTIONS = [
+  { value: 'actively_looking', label: 'Actively Looking' },
+  { value: 'open', label: 'Open to Opportunities' },
+  { value: 'not_looking', label: 'Not Looking' },
+] as const;
+
+export const START_DATE_OPTIONS = [
+  { value: 'immediately', label: 'Immediately' },
+  { value: '2_weeks', label: '2 Weeks Notice' },
+  { value: '1_month', label: '1 Month Notice' },
+  { value: 'flexible', label: 'Flexible' },
+] as const;
+
 // Interview Coach types
 export interface InterviewPrep {
   id: string;
