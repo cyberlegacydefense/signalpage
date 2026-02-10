@@ -7,6 +7,15 @@ const nextConfig: NextConfig = {
     return process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ||
            `build-${Date.now()}`;
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'res.cloudinary.com',
+        pathname: '/**',
+      },
+    ],
+  },
 };
 
 export default nextConfig;
