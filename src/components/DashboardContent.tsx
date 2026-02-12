@@ -127,6 +127,53 @@ export function DashboardContent({ jobs: initialJobs, username }: DashboardConte
     };
   }, [initialJobs]);
 
+  // Polling fallback for generating pages (real-time may not always work)
+  useEffect(() => {
+    const generatingPages = jobs.flatMap(job =>
+      job.signal_pages
+        .filter(p => p.generation_status === 'generating')
+        .map(p => ({ pageId: p.id, jobId: job.id }))
+    );
+
+    if (generatingPages.length === 0) return;
+
+    const supabase = createClient();
+
+    const pollStatus = async () => {
+      const pageIds = generatingPages.map(p => p.pageId);
+
+      const { data: pages } = await supabase
+        .from('signal_pages')
+        .select('id, generation_status, generation_error, match_score')
+        .in('id', pageIds);
+
+      if (pages) {
+        setJobs(prevJobs =>
+          prevJobs.map(job => ({
+            ...job,
+            signal_pages: job.signal_pages.map(page => {
+              const updated = pages.find(p => p.id === page.id);
+              if (updated && updated.generation_status !== page.generation_status) {
+                return {
+                  ...page,
+                  generation_status: updated.generation_status,
+                  generation_error: updated.generation_error,
+                  match_score: updated.match_score,
+                };
+              }
+              return page;
+            }),
+          }))
+        );
+      }
+    };
+
+    // Poll every 3 seconds while there are generating pages
+    const interval = setInterval(pollStatus, 3000);
+
+    return () => clearInterval(interval);
+  }, [jobs]);
+
   // Load saved view preference
   useEffect(() => {
     const saved = localStorage.getItem('dashboardViewMode') as ViewMode | null;
