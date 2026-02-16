@@ -86,6 +86,10 @@ export default function PageEditorPage({ params }: PageProps) {
   const [isRetrying, setIsRetrying] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let channel: any = null;
+    let isMounted = true;
+
     async function loadPage() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -101,7 +105,7 @@ export default function PageEditorPage({ params }: PageProps) {
         .eq('id', user.id)
         .single();
 
-      if (profile) {
+      if (profile && isMounted) {
         setUsername(profile.username);
         setSubscriptionTier(profile.subscription_tier || 'free');
       }
@@ -128,15 +132,17 @@ export default function PageEditorPage({ params }: PageProps) {
         return;
       }
 
-      setPage(data as PageData);
-      setShowAICommentary(data.show_ai_commentary !== false);
-      setJobId(data.job_id);
-      setGenerationStatus(data.generation_status || 'ready');
-      setGenerationError(data.generation_error || null);
-      setIsLoading(false);
+      if (isMounted) {
+        setPage(data as PageData);
+        setShowAICommentary(data.show_ai_commentary !== false);
+        setJobId(data.job_id);
+        setGenerationStatus(data.generation_status || 'ready');
+        setGenerationError(data.generation_error || null);
+        setIsLoading(false);
+      }
 
       // Subscribe to real-time updates for this page
-      const channel = supabase
+      channel = supabase
         .channel(`page-${pageId}`)
         .on(
           'postgres_changes',
@@ -149,9 +155,11 @@ export default function PageEditorPage({ params }: PageProps) {
           (payload) => {
             console.log('[Real-time] Page updated:', payload);
             const newData = payload.new as PageData;
-            setPage((prev) => prev ? { ...prev, ...newData } : null);
-            setGenerationStatus(newData.generation_status || 'ready');
-            setGenerationError(newData.generation_error || null);
+            if (isMounted) {
+              setPage((prev) => prev ? { ...prev, ...newData } : null);
+              setGenerationStatus(newData.generation_status || 'ready');
+              setGenerationError(newData.generation_error || null);
+            }
           }
         )
         .subscribe();
@@ -167,11 +175,6 @@ export default function PageEditorPage({ params }: PageProps) {
           console.error('[Generation] Failed to trigger generation:', err);
         });
       }
-
-      // Cleanup subscription on unmount
-      return () => {
-        supabase.removeChannel(channel);
-      };
 
       // Load analytics
       const { data: analyticsData } = await supabase
@@ -227,34 +230,45 @@ export default function PageEditorPage({ params }: PageProps) {
       });
       const engagementScore = calculateEngagementScore(metrics);
 
-      if (nonOwnerViews.length > 0) {
-        setAnalytics({
-          totalViews: allViews.length,
-          uniqueViews: nonOwnerViews.length,
-          returnVisitors,
-          avgTimeOnPage,
-          avgScrollDepth,
-          engagementScore,
-          firstViewAt: nonOwnerViews[0].created_at,
-          lastViewAt: nonOwnerViews[nonOwnerViews.length - 1].created_at,
-          publishedAt: data.generated_at,
-        });
-      } else {
-        setAnalytics({
-          totalViews: allViews.length,
-          uniqueViews: 0,
-          returnVisitors: 0,
-          avgTimeOnPage: 0,
-          avgScrollDepth: 0,
-          engagementScore: 0,
-          firstViewAt: null,
-          lastViewAt: null,
-          publishedAt: data.generated_at,
-        });
+      if (isMounted) {
+        if (nonOwnerViews.length > 0) {
+          setAnalytics({
+            totalViews: allViews.length,
+            uniqueViews: nonOwnerViews.length,
+            returnVisitors,
+            avgTimeOnPage,
+            avgScrollDepth,
+            engagementScore,
+            firstViewAt: nonOwnerViews[0].created_at,
+            lastViewAt: nonOwnerViews[nonOwnerViews.length - 1].created_at,
+            publishedAt: data.generated_at,
+          });
+        } else {
+          setAnalytics({
+            totalViews: allViews.length,
+            uniqueViews: 0,
+            returnVisitors: 0,
+            avgTimeOnPage: 0,
+            avgScrollDepth: 0,
+            engagementScore: 0,
+            firstViewAt: null,
+            lastViewAt: null,
+            publishedAt: data.generated_at,
+          });
+        }
       }
     }
 
     loadPage();
+
+    // Cleanup subscription on unmount
+    return () => {
+      isMounted = false;
+      if (channel) {
+        const supabase = createClient();
+        supabase.removeChannel(channel);
+      }
+    };
   }, [pageId, router]);
 
   const handlePublish = async () => {

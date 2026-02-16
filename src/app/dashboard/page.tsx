@@ -17,6 +17,7 @@ export default async function DashboardPage({
   const { data: { user } } = await supabase.auth.getUser();
 
   // Get user's jobs with their signal pages
+  // Order signal_pages by generated_at desc to match Analytics API behavior
   const { data: jobs } = await supabase
     .from('jobs')
     .select(`
@@ -32,7 +33,8 @@ export default async function DashboardPage({
       )
     `)
     .eq('user_id', user!.id)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .order('generated_at', { referencedTable: 'signal_pages', ascending: false });
 
   // Get user profile for username
   const { data: profile } = await supabase
