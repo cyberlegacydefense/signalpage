@@ -101,6 +101,7 @@ export function DashboardContent({ jobs: initialJobs, username }: DashboardConte
             generation_status: GenerationStatus;
             generation_error: string | null;
             match_score: number | null;
+            is_published: boolean;
           };
 
           setJobs(prevJobs =>
@@ -113,6 +114,7 @@ export function DashboardContent({ jobs: initialJobs, username }: DashboardConte
                       generation_status: updated.generation_status,
                       generation_error: updated.generation_error,
                       match_score: updated.match_score,
+                      is_published: updated.is_published,
                     }
                   : page
               ),
@@ -144,7 +146,7 @@ export function DashboardContent({ jobs: initialJobs, username }: DashboardConte
 
       const { data: pages } = await supabase
         .from('signal_pages')
-        .select('id, generation_status, generation_error, match_score')
+        .select('id, generation_status, generation_error, match_score, is_published')
         .in('id', pageIds);
 
       if (pages) {
@@ -159,6 +161,7 @@ export function DashboardContent({ jobs: initialJobs, username }: DashboardConte
                   generation_status: updated.generation_status,
                   generation_error: updated.generation_error,
                   match_score: updated.match_score,
+                  is_published: updated.is_published,
                 };
               }
               return page;
@@ -188,7 +191,7 @@ export function DashboardContent({ jobs: initialJobs, username }: DashboardConte
     localStorage.setItem('dashboardViewMode', mode);
   };
 
-  const getStatusBadge = (status: string, generationStatus?: GenerationStatus | null) => {
+  const getStatusBadge = (status: string, generationStatus?: GenerationStatus | null, isPublished?: boolean) => {
     // If page is generating, show generating badge
     if (generationStatus === 'generating') {
       return (
@@ -207,6 +210,14 @@ export function DashboardContent({ jobs: initialJobs, username }: DashboardConte
       return <Badge variant="danger">Failed</Badge>;
     }
 
+    // If page generation is ready, show based on publish status
+    if (generationStatus === 'ready') {
+      return isPublished
+        ? <Badge variant="success">Published</Badge>
+        : <Badge variant="default">Draft</Badge>;
+    }
+
+    // Fallback to job status (for pages without generation_status)
     switch (status) {
       case 'published':
         return <Badge variant="success">Published</Badge>;
@@ -335,7 +346,7 @@ export function DashboardContent({ jobs: initialJobs, username }: DashboardConte
                       <p className="text-sm text-gray-600">{job.company_name}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
-                      {getStatusBadge(job.status, page?.generation_status)}
+                      {getStatusBadge(job.status, page?.generation_status, page?.is_published)}
                       {isReady && getMatchScoreBadge(page?.match_score)}
                       {isReady && page && (
                         <div className="flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 whitespace-nowrap">
@@ -459,7 +470,7 @@ export function DashboardContent({ jobs: initialJobs, username }: DashboardConte
                       {job.company_name}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4">
-                      {getStatusBadge(job.status, page?.generation_status)}
+                      {getStatusBadge(job.status, page?.generation_status, page?.is_published)}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4">
                       <ApplicationStatusBadge status={job.application_status} />
