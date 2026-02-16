@@ -23,11 +23,13 @@ import type { Superpower, Availability } from '@/types';
 interface ProfileData {
   username: string;
   full_name: string;
+  email?: string;
   headline?: string;
   avatar_url?: string;
   linkedin_url?: string;
   portfolio_url?: string;
   github_url?: string;
+  calendar_link?: string;
 }
 
 export default function ProfileCardPage() {
@@ -41,7 +43,6 @@ export default function ProfileCardPage() {
   const [positioningStatement, setPositioningStatement] = useState('');
   const [superpowers, setSuperpowers] = useState<Superpower[]>([]);
   const [availability, setAvailability] = useState<Partial<Availability>>({});
-  const [calendarLink, setCalendarLink] = useState('');
   const [profileCardEnabled, setProfileCardEnabled] = useState(false);
 
   // Profile data for preview
@@ -62,7 +63,6 @@ export default function ProfileCardPage() {
         setPositioningStatement(data.profileCard.positioning_statement || '');
         setSuperpowers(data.profileCard.superpowers || []);
         setAvailability(data.profileCard.availability || {});
-        setCalendarLink(data.profileCard.calendar_link || '');
         setProfileCardEnabled(data.profileCard.profile_card_enabled || false);
         setProfile(data.profile);
       }
@@ -116,7 +116,6 @@ export default function ProfileCardPage() {
           positioning_statement: positioningStatement,
           superpowers,
           availability,
-          calendar_link: calendarLink,
           profile_card_enabled: profileCardEnabled,
         }),
       });
@@ -314,21 +313,15 @@ export default function ProfileCardPage() {
             </CardContent>
           </Card>
 
-          {/* Calendar Link */}
+          {/* Links Info */}
           <Card>
-            <CardHeader>
-              <CardTitle>Calendar Link</CardTitle>
-              <CardDescription>
-                Add a Calendly or Cal.com link so people can book time with you
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Input
-                type="url"
-                placeholder="https://calendly.com/yourname"
-                value={calendarLink}
-                onChange={(e) => setCalendarLink(e.target.value)}
-              />
+            <CardContent className="py-4">
+              <p className="text-sm text-gray-600">
+                Social links (LinkedIn, GitHub, Calendar) are managed in your{' '}
+                <Link href="/dashboard/profile" className="text-blue-600 hover:underline">
+                  Profile settings
+                </Link>
+              </p>
             </CardContent>
           </Card>
 
@@ -338,7 +331,7 @@ export default function ProfileCardPage() {
               href="/dashboard/profile"
               className="text-sm text-gray-600 hover:text-gray-900"
             >
-              Edit basic profile info →
+              Edit profile &amp; links →
             </Link>
             <Button
               variant="primary"
@@ -369,7 +362,6 @@ export default function ProfileCardPage() {
             positioningStatement={positioningStatement}
             superpowers={superpowers}
             availability={availability}
-            calendarLink={calendarLink}
             profile={profile}
           />
         </div>

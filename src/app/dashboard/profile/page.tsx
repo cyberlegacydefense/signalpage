@@ -300,6 +300,7 @@ export default function ProfilePage() {
           linkedin_url: profile.linkedin_url,
           portfolio_url: profile.portfolio_url,
           github_url: profile.github_url,
+          calendar_link: profile.calendar_link,
         })
         .eq('id', user.id);
 
@@ -540,7 +541,7 @@ export default function ProfilePage() {
               className="min-h-[100px]"
             />
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
               <Input
                 label="LinkedIn URL"
                 type="url"
@@ -549,6 +550,16 @@ export default function ProfilePage() {
                   setProfile((prev) => ({ ...prev, linkedin_url: e.target.value }))
                 }
                 placeholder="https://linkedin.com/in/..."
+              />
+
+              <Input
+                label="GitHub URL"
+                type="url"
+                value={profile.github_url || ''}
+                onChange={(e) =>
+                  setProfile((prev) => ({ ...prev, github_url: e.target.value }))
+                }
+                placeholder="https://github.com/..."
               />
 
               <Input
@@ -562,13 +573,14 @@ export default function ProfilePage() {
               />
 
               <Input
-                label="GitHub URL"
+                label="Calendar Link"
                 type="url"
-                value={profile.github_url || ''}
+                value={profile.calendar_link || ''}
                 onChange={(e) =>
-                  setProfile((prev) => ({ ...prev, github_url: e.target.value }))
+                  setProfile((prev) => ({ ...prev, calendar_link: e.target.value }))
                 }
-                placeholder="https://github.com/..."
+                placeholder="https://calendly.com/..."
+                helperText="Calendly, Cal.com, or similar booking link"
               />
             </div>
 

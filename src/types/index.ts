@@ -10,6 +10,7 @@ export interface User {
   linkedin_url?: string;
   portfolio_url?: string;
   github_url?: string;
+  calendar_link?: string;
   avatar_url?: string;
   created_at: string;
   updated_at: string;

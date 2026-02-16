@@ -225,6 +225,8 @@ export default async function SignalPage({ params }: PageProps) {
           email: profile.email,
           linkedin_url: profile.linkedin_url,
           portfolio_url: profile.portfolio_url,
+          github_url: profile.github_url,
+          calendar_link: profile.calendar_link,
         }}
         companyName={jobInfo.company_name}
         roleTitle={jobInfo.role_title}

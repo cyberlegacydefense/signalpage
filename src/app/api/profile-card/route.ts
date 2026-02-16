@@ -14,7 +14,7 @@ export async function GET() {
 
     const { data: profile, error } = await supabase
       .from('profiles')
-      .select('positioning_statement, superpowers, availability, calendar_link, profile_card_enabled, username, full_name, headline, avatar_url, linkedin_url, portfolio_url, github_url')
+      .select('positioning_statement, superpowers, availability, calendar_link, profile_card_enabled, username, full_name, email, headline, avatar_url, linkedin_url, portfolio_url, github_url')
       .eq('id', user.id)
       .single();
 
@@ -28,17 +28,18 @@ export async function GET() {
         positioning_statement: profile.positioning_statement || '',
         superpowers: (profile.superpowers || []) as Superpower[],
         availability: (profile.availability || {}) as Partial<Availability>,
-        calendar_link: profile.calendar_link || '',
         profile_card_enabled: profile.profile_card_enabled || false,
       },
       profile: {
         username: profile.username,
         full_name: profile.full_name,
+        email: profile.email,
         headline: profile.headline,
         avatar_url: profile.avatar_url,
         linkedin_url: profile.linkedin_url,
         portfolio_url: profile.portfolio_url,
         github_url: profile.github_url,
+        calendar_link: profile.calendar_link,
       },
     });
   } catch (error) {
@@ -62,7 +63,6 @@ export async function PUT(request: Request) {
       positioning_statement,
       superpowers,
       availability,
-      calendar_link,
       profile_card_enabled,
     } = body;
 
@@ -90,9 +90,6 @@ export async function PUT(request: Request) {
     if (availability !== undefined) {
       updateData.availability = availability || {};
     }
-    if (calendar_link !== undefined) {
-      updateData.calendar_link = calendar_link || null;
-    }
     if (profile_card_enabled !== undefined) {
       updateData.profile_card_enabled = profile_card_enabled;
     }
@@ -101,7 +98,7 @@ export async function PUT(request: Request) {
       .from('profiles')
       .update(updateData)
       .eq('id', user.id)
-      .select('positioning_statement, superpowers, availability, calendar_link, profile_card_enabled')
+      .select('positioning_statement, superpowers, availability, profile_card_enabled')
       .single();
 
     if (error) {
@@ -114,7 +111,6 @@ export async function PUT(request: Request) {
         positioning_statement: profile.positioning_statement || '',
         superpowers: (profile.superpowers || []) as Superpower[],
         availability: (profile.availability || {}) as Partial<Availability>,
-        calendar_link: profile.calendar_link || '',
         profile_card_enabled: profile.profile_card_enabled || false,
       },
     });
