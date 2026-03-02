@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
+import { InterviewerModelPractice } from '@/components/InterviewerModelPractice';
 import type {
   RoleContextPackage,
   InterviewQuestions,
@@ -610,6 +611,9 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
 
   return (
     <div className="space-y-6">
+      {/* Practice with Your Interviewer - Interviewer Model */}
+      <InterviewerModelPractice jobId={jobId} hasAccess={hasAccess} />
+
       {/* Quick Tips */}
       {prep.quick_tips && prep.quick_tips.length > 0 && (
         <Card>
