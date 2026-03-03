@@ -3,24 +3,18 @@
  *
  * "Prepare with an AI model that thinks like your interviewer."
  *
- * Next.js App Router API route.
- * POST /api/interviewer-model/generate
+ * This route delegates to a Supabase Edge Function for longer timeout.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import {
-  generateInterviewerModel,
-  generatePanelStrategy,
-  parseLinkedInPaste,
-} from "@/lib/interviewer-model/pipeline";
-import type { InterviewerModelInput, InterviewerProfile } from "@/lib/interviewer-model/system-prompt";
+import { parseLinkedInPaste } from "@/lib/interviewer-model/pipeline";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
     // ── Validate required fields ──
-    const { resume, jobDescription, interviewers, interviewType, candidateNotes } = body;
+    const { resume, jobDescription, interviewers } = body;
 
     if (!resume || !jobDescription || !interviewers?.length) {
       return NextResponse.json(
@@ -30,18 +24,22 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Parse interviewer profiles ──
-    const interviewerProfiles: InterviewerProfile[] = interviewers.map(
+    const parsedInterviewers = interviewers.map(
       (interviewer: {
         name?: string;
         currentRole?: string;
         company?: string;
         linkedinPaste?: string;
         linkedinText?: string;
-        publishedContent?: string[];
-        githubBio?: string;
         additionalContext?: string;
       }) => {
-        const profile: InterviewerProfile = {
+        const profile: {
+          name: string;
+          currentRole?: string;
+          company?: string;
+          linkedinText?: string;
+          additionalContext?: string;
+        } = {
           name: interviewer.name || "Unknown",
           currentRole: interviewer.currentRole,
           company: interviewer.company,
@@ -52,7 +50,6 @@ export async function POST(request: NextRequest) {
         if (interviewer.linkedinPaste) {
           const parsed = parseLinkedInPaste(interviewer.linkedinPaste);
           profile.linkedinText = parsed.rawCleaned;
-          profile.careerHistory = parsed.experience;
           if (!profile.name || profile.name === "Unknown") profile.name = parsed.name;
           if (!profile.currentRole) profile.currentRole = parsed.headline;
         }
@@ -61,53 +58,58 @@ export async function POST(request: NextRequest) {
           profile.linkedinText = interviewer.linkedinText;
         }
 
-        if (interviewer.publishedContent) {
-          profile.publishedContent = interviewer.publishedContent;
-        }
-
-        if (interviewer.githubBio) {
-          profile.githubBio = interviewer.githubBio;
-        }
-
         return profile;
       }
     );
 
-    const input: InterviewerModelInput = {
-      resume,
-      jobDescription,
-      interviewerProfiles,
-      interviewType: interviewType || undefined,
-      candidateNotes: candidateNotes || undefined,
-    };
+    // ── Call Supabase Edge Function (has longer timeout) ──
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-    // ── Generate model ──
-    // Use panel strategy for 2+ interviewers
-    let result;
-    if (interviewerProfiles.length > 1) {
-      result = await generatePanelStrategy(input);
-    } else {
-      result = {
-        interviewerModels: await generateInterviewerModel(input),
-        panelDynamics: null,
-      };
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error("[Interviewer Model] Missing Supabase config");
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 }
+      );
     }
+
+    console.log("[Interviewer Model] Calling Supabase Edge Function...");
+
+    const edgeResponse = await fetch(
+      `${supabaseUrl}/functions/v1/generate-interviewer-model`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${supabaseAnonKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          resume,
+          jobDescription,
+          interviewers: parsedInterviewers,
+        }),
+      }
+    );
+
+    if (!edgeResponse.ok) {
+      const errorText = await edgeResponse.text();
+      console.error("[Interviewer Model] Edge function error:", errorText);
+      return NextResponse.json(
+        { error: "Failed to generate Interviewer Model" },
+        { status: edgeResponse.status }
+      );
+    }
+
+    const result = await edgeResponse.json();
 
     return NextResponse.json({
       success: true,
-      briefing: result.interviewerModels,
-      panelDynamics: result.panelDynamics,
+      briefing: result.briefing,
+      panelDynamics: null,
     });
   } catch (error: unknown) {
     console.error("Interviewer Model generation failed:", error);
-
-    const err = error as { status?: number };
-    if (err.status === 429) {
-      return NextResponse.json(
-        { error: "Rate limited. Please try again in a moment." },
-        { status: 429 }
-      );
-    }
 
     return NextResponse.json(
       { error: "Failed to generate Interviewer Model." },
@@ -130,15 +132,9 @@ export async function GET() {
           currentRole: "VP of Engineering",
           company: "TechCorp",
           linkedinPaste: "Paste the full LinkedIn profile page content here...",
-          publishedContent: [
-            "Full text of an article they wrote...",
-            "Transcript of a podcast they appeared on...",
-          ],
           additionalContext: "She spoke at QCon 2024 about scaling engineering teams.",
         },
       ],
-      interviewType: "executive",
-      candidateNotes: "I'm concerned about my gap year — want to address it proactively.",
     },
   });
 }
