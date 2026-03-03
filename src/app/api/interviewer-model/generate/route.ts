@@ -7,7 +7,50 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { parseLinkedInPaste } from "@/lib/interviewer-model/pipeline";
+
+// Inline LinkedIn parser to avoid import issues
+function parseLinkedInPaste(rawText: string): {
+  name: string;
+  headline: string;
+  rawCleaned: string;
+} {
+  const lines = rawText
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const sections: Record<string, string[]> = {};
+  let currentSection = "header";
+  sections[currentSection] = [];
+
+  const sectionHeaders = [
+    "experience",
+    "education",
+    "skills",
+    "recommendations",
+    "about",
+  ];
+
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    const matchedSection = sectionHeaders.find(
+      (h) => lower === h || lower === h + ":"
+    );
+    if (matchedSection) {
+      currentSection = matchedSection;
+      sections[currentSection] = [];
+    } else {
+      if (!sections[currentSection]) sections[currentSection] = [];
+      sections[currentSection].push(line);
+    }
+  }
+
+  return {
+    name: sections["header"]?.[0] || "Unknown",
+    headline: sections["header"]?.[1] || "",
+    rawCleaned: lines.join("\n"),
+  };
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -123,18 +166,5 @@ export async function GET() {
     feature: "Interviewer Model",
     tagline: "Prepare with an AI model that thinks like your interviewer.",
     usage: "POST to this endpoint with { resume, jobDescription, interviewers }",
-    example: {
-      resume: "Full resume text...",
-      jobDescription: "Full job description text...",
-      interviewers: [
-        {
-          name: "Jane Smith",
-          currentRole: "VP of Engineering",
-          company: "TechCorp",
-          linkedinPaste: "Paste the full LinkedIn profile page content here...",
-          additionalContext: "She spoke at QCon 2024 about scaling engineering teams.",
-        },
-      ],
-    },
   });
 }
