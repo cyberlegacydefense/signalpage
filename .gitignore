@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# staging directories
+/Interviewer_Model
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
