@@ -21,7 +21,7 @@ import {
 // CONFIG
 // ─────────────────────────────────────────────
 
-const ANTHROPIC_MODEL = "claude-sonnet-4-5-20250514"; // Sonnet for speed/cost balance; swap to Opus for highest quality
+const ANTHROPIC_MODEL = "claude-sonnet-4-5-20250929"; // Sonnet 4.5 for speed/cost balance
 const MAX_TOKENS = 8192;
 const TEMPERATURE = 0.3; // Low temp for structured, consistent output
 

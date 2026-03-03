@@ -23,7 +23,7 @@ import {
 // CONFIG
 // ─────────────────────────────────────────────
 
-const MODEL = "claude-sonnet-4-5-20250514";
+const MODEL = "claude-sonnet-4-5-20250929";
 const MAX_TOKENS = 1024;       // Per-turn limit (interviewer responses should be concise)
 const DEBRIEF_MAX_TOKENS = 4096;
 const TEMPERATURE = 0.6;       // Slightly higher than briefing — we want natural, varied speech
