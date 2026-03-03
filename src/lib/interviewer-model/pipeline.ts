@@ -21,7 +21,9 @@ import {
 // CONFIG
 // ─────────────────────────────────────────────
 
-const ANTHROPIC_MODEL = "claude-sonnet-4-5-20250929"; // Sonnet 4.5 for speed/cost balance
+// Use Haiku for speed (critical for serverless timeout limits)
+// Switch to Sonnet for higher quality if timeout issues are resolved
+const ANTHROPIC_MODEL = "claude-haiku-4-5-20251001";
 const MAX_TOKENS = 8192;
 const TEMPERATURE = 0.3; // Low temp for structured, consistent output
 

@@ -9,6 +9,14 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
+# Extend function timeout for AI-heavy endpoints (requires Pro plan for full 26s)
+[functions]
+  external_node_modules = ["@anthropic-ai/sdk"]
+
+[[edge_functions]]
+  path = "/api/interviewer-model/*"
+  function = "interviewer-model"
+
 # Headers for security
 [[headers]]
   for = "/*"
