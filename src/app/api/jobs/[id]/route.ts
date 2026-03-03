@@ -15,22 +15,35 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Fetch the job with resume and JD
-    const { data: job, error } = await supabase
+    // Fetch the job
+    const { data: job, error: jobError } = await supabase
       .from('jobs')
-      .select('id, company_name, role_title, job_description, resume_text')
+      .select('id, company_name, role_title, job_description')
       .eq('id', jobId)
       .eq('user_id', user.id)
       .single();
 
-    if (error || !job) {
+    if (jobError || !job) {
       return NextResponse.json(
         { error: 'Job not found' },
         { status: 404 }
       );
     }
 
-    return NextResponse.json(job);
+    // Fetch the user's primary resume (or most recent)
+    const { data: resume } = await supabase
+      .from('resumes')
+      .select('raw_text')
+      .eq('user_id', user.id)
+      .order('is_primary', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    return NextResponse.json({
+      ...job,
+      resume_text: resume?.raw_text || '',
+    });
   } catch (error) {
     console.error('Error fetching job:', error);
     return NextResponse.json(
