@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
     console.log("[Interviewer Model] Calling Supabase Edge Function...");
 
     const edgeResponse = await fetch(
-      `${supabaseUrl}/functions/v1/generate-interviewer-model`,
+      `${supabaseUrl}/functions/v1/clever-api`,
       {
         method: "POST",
         headers: {
