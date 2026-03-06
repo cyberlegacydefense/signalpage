@@ -1,60 +1,52 @@
 /**
  * SignalPage.ai — Interviewer Model: Practice Session API
  *
- * POST /api/interviewer-model/practice
- *
- * Actions:
- *   { action: "start" }           → Initialize session, get interviewer's opening
- *   { action: "respond" }         → Send candidate message, get interviewer reply
- *   { action: "debrief" }         → End interview, get performance analysis
- *   { action: "generate_avatar" } → Create visual avatar from photo
- *
- * The session is stateful — pass session state back and forth
- * between client and server (or use server-side session storage).
+ * Sessions are persisted to database for durability across refreshes.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { PracticeSessionManager } from "@/lib/interviewer-model/session-manager";
+import { createClient } from "@/lib/supabase/server";
+import Anthropic from "@anthropic-ai/sdk";
 import {
-  AvatarEngine,
-  inferVoiceProfile,
-  estimateAvatarCost,
-} from "@/lib/interviewer-model/avatar-engine";
-import type { PracticeSessionConfig } from "@/lib/interviewer-model/persona-engine";
-import type { AvatarConfig, GeneratedAvatar } from "@/lib/interviewer-model/avatar-engine";
+  buildPersonaPrompt,
+  buildOpeningPrompt,
+  buildDebriefPrompt,
+  type PracticeSessionConfig,
+} from "@/lib/interviewer-model/persona-engine";
 
-// ─────────────────────────────────────────────
-// In-memory session store (swap for Redis/Supabase in production)
-// ─────────────────────────────────────────────
-
-const sessions = new Map<string, PracticeSessionManager>();
-const avatars = new Map<string, { engine: AvatarEngine; avatar: GeneratedAvatar }>();
+const MODEL = "claude-haiku-4-5-20251001";
+const MAX_TOKENS = 1024;
+const DEBRIEF_MAX_TOKENS = 4096;
+const TEMPERATURE = 0.6;
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const { action } = body;
 
     switch (action) {
       case "start":
-        return handleStart(body);
+        return handleStart(supabase, user.id, body);
       case "respond":
-        return handleRespond(body);
+        return handleRespond(supabase, user.id, body);
       case "debrief":
-        return handleDebrief(body);
-      case "generate_avatar":
-        return handleGenerateAvatar(body);
+        return handleDebrief(supabase, user.id, body);
+      case "list":
+        return handleList(supabase, user.id, body);
       default:
-        return NextResponse.json(
-          { error: `Unknown action: ${action}` },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
     }
   } catch (error: unknown) {
     console.error("Practice session error:", error);
-    const err = error as { message?: string };
     return NextResponse.json(
-      { error: err.message || "Internal server error" },
+      { error: error instanceof Error ? error.message : "Internal server error" },
       { status: 500 }
     );
   }
@@ -64,70 +56,103 @@ export async function POST(request: NextRequest) {
 // ACTION: START
 // ─────────────────────────────────────────────
 
-async function handleStart(body: {
-  briefing?: PracticeSessionConfig["briefing"];
-  interviewerIndex?: number;
-  mode?: PracticeSessionConfig["mode"];
-  difficulty?: PracticeSessionConfig["difficulty"];
-  candidateNotes?: string;
-  maxTurns?: number;
-  avatarConfig?: { cacheKey?: string };
-}) {
-  const { briefing, interviewerIndex, mode, difficulty, candidateNotes, maxTurns, avatarConfig } = body;
+async function handleStart(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  body: {
+    jobId?: string;
+    briefing?: PracticeSessionConfig["briefing"];
+    interviewerIndex?: number;
+    mode?: PracticeSessionConfig["mode"];
+    difficulty?: PracticeSessionConfig["difficulty"];
+    maxTurns?: number;
+  }
+) {
+  const { jobId, briefing, interviewerIndex = 0, mode = "full_interview", difficulty = "neutral", maxTurns = 20 } = body;
 
   if (!briefing) {
-    return NextResponse.json(
-      { error: "Missing briefing. Generate an Interviewer Model first." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Missing briefing" }, { status: 400 });
   }
 
+  // Build system prompt
   const config: PracticeSessionConfig = {
     briefing,
-    interviewerIndex: interviewerIndex || 0,
-    mode: mode || "full_interview",
-    difficulty: difficulty || "neutral",
-    candidateNotes,
-    maxTurns: maxTurns || 20,
+    interviewerIndex,
+    mode,
+    difficulty,
+    maxTurns,
   };
+  const systemPrompt = buildPersonaPrompt(config);
+  const openingPrompt = buildOpeningPrompt(config);
 
-  // Initialize session
-  const manager = new PracticeSessionManager(config);
-  const opening = await manager.startInterview();
+  // Call Claude for opening
+  const client = new Anthropic();
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: MAX_TOKENS,
+    temperature: TEMPERATURE,
+    system: systemPrompt,
+    messages: [{ role: "user", content: openingPrompt }],
+  });
 
-  // Store session
-  const session = manager.getSession();
-  sessions.set(session.sessionId, manager);
+  const textBlock = response.content.find((b) => b.type === "text");
+  const responseText = textBlock?.type === "text" ? textBlock.text : "";
 
-  // Generate avatar speaking clip if avatar is configured
-  let speakingClip = null;
-  if (avatarConfig?.cacheKey) {
-    const avatarData = avatars.get(avatarConfig.cacheKey);
-    if (avatarData) {
-      speakingClip = await avatarData.engine.speak(opening.dialogue);
-    }
+  // Parse response
+  let parsed;
+  try {
+    const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonStr = jsonMatch ? jsonMatch[1].trim() : responseText.trim();
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    parsed = { dialogue: responseText, emotional_tone: "professional" };
+  }
+
+  // Create session in database
+  const messages = [
+    {
+      role: "interviewer",
+      content: parsed.dialogue,
+      turn_number: 1,
+      emotional_tone: parsed.emotional_tone,
+    },
+  ];
+
+  const { data: session, error } = await supabase
+    .from("practice_sessions")
+    .insert({
+      user_id: userId,
+      job_id: jobId,
+      mode,
+      difficulty,
+      interviewer_index: interviewerIndex,
+      max_turns: maxTurns,
+      status: "active",
+      messages,
+      system_prompt: systemPrompt,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Failed to create session:", error);
+    return NextResponse.json({ error: "Failed to create session" }, { status: 500 });
   }
 
   return NextResponse.json({
     success: true,
-    sessionId: session.sessionId,
+    sessionId: session.id,
     interviewer: {
-      name: briefing.interviewer_models[interviewerIndex || 0]?.name,
-      role: briefing.interviewer_models[interviewerIndex || 0]?.current_role,
-      company: briefing.interviewer_models[interviewerIndex || 0]?.company,
+      name: briefing.interviewer_models[interviewerIndex]?.name,
+      role: briefing.interviewer_models[interviewerIndex]?.current_role,
+      company: briefing.interviewer_models[interviewerIndex]?.company,
     },
     turn: {
-      dialogue: opening.dialogue,
-      emotionalTone: opening.emotionalTone,
-      turnNumber: opening.turnNumber,
-      speakingClip,
+      dialogue: parsed.dialogue,
+      emotionalTone: parsed.emotional_tone,
+      turnNumber: 1,
     },
-    sessionStatus: opening.sessionStatus,
-    config: {
-      mode: config.mode,
-      difficulty: config.difficulty,
-      maxTurns: config.maxTurns,
-    },
+    config: { mode, difficulty, maxTurns },
   });
 }
 
@@ -135,51 +160,109 @@ async function handleStart(body: {
 // ACTION: RESPOND
 // ─────────────────────────────────────────────
 
-async function handleRespond(body: {
-  sessionId?: string;
-  message?: string;
-  avatarCacheKey?: string;
-}) {
-  const { sessionId, message, avatarCacheKey } = body;
+async function handleRespond(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  body: { sessionId?: string; message?: string }
+) {
+  const { sessionId, message } = body;
 
   if (!sessionId || !message) {
-    return NextResponse.json(
-      { error: "Missing sessionId or message" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Missing sessionId or message" }, { status: 400 });
   }
 
-  const manager = sessions.get(sessionId);
-  if (!manager) {
-    return NextResponse.json(
-      { error: "Session not found. Start a new practice session." },
-      { status: 404 }
-    );
+  // Load session
+  const { data: session, error } = await supabase
+    .from("practice_sessions")
+    .select("*")
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .single();
+
+  if (error || !session) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
 
-  // Get interviewer's response
-  const turn = await manager.respondToCandidate(message);
-
-  // Generate speaking clip if avatar exists
-  let speakingClip = null;
-  if (avatarCacheKey) {
-    const avatarData = avatars.get(avatarCacheKey);
-    if (avatarData) {
-      speakingClip = await avatarData.engine.speak(turn.dialogue);
-    }
+  if (session.status !== "active") {
+    return NextResponse.json({ error: "Session is not active" }, { status: 400 });
   }
+
+  // Build message history for Claude
+  const messages = session.messages || [];
+  const turnNumber = messages.length + 1;
+
+  // Add candidate message
+  messages.push({
+    role: "candidate",
+    content: message,
+    turn_number: turnNumber,
+  });
+
+  // Build Claude messages
+  const claudeMessages = messages.map((m: { role: string; content: string }) => ({
+    role: m.role === "interviewer" ? "assistant" : "user",
+    content: m.content,
+  }));
+
+  // Add a user message prompting for next response if last was assistant
+  if (claudeMessages[claudeMessages.length - 1]?.role === "user") {
+    // Good, we have a user message last
+  }
+
+  // Call Claude
+  const client = new Anthropic();
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: MAX_TOKENS,
+    temperature: TEMPERATURE,
+    system: session.system_prompt,
+    messages: claudeMessages,
+  });
+
+  const textBlock = response.content.find((b) => b.type === "text");
+  const responseText = textBlock?.type === "text" ? textBlock.text : "";
+
+  // Parse response
+  let parsed;
+  try {
+    const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonStr = jsonMatch ? jsonMatch[1].trim() : responseText.trim();
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    parsed = { dialogue: responseText, emotional_tone: "professional" };
+  }
+
+  // Add interviewer response
+  messages.push({
+    role: "interviewer",
+    content: parsed.dialogue,
+    turn_number: turnNumber + 1,
+    emotional_tone: parsed.emotional_tone,
+  });
+
+  // Check if interview should end
+  const shouldEnd = messages.length >= session.max_turns * 2;
+  const status = shouldEnd ? "ended" : "active";
+
+  // Update session
+  await supabase
+    .from("practice_sessions")
+    .update({
+      messages,
+      status,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", sessionId);
 
   return NextResponse.json({
     success: true,
     sessionId,
     turn: {
-      dialogue: turn.dialogue,
-      emotionalTone: turn.emotionalTone,
-      turnNumber: turn.turnNumber,
-      nextMove: turn.nextMove,
-      speakingClip,
+      dialogue: parsed.dialogue,
+      emotionalTone: parsed.emotional_tone,
+      turnNumber: turnNumber + 1,
     },
-    sessionStatus: turn.sessionStatus,
+    sessionStatus: status,
   });
 }
 
@@ -187,146 +270,164 @@ async function handleRespond(body: {
 // ACTION: DEBRIEF
 // ─────────────────────────────────────────────
 
-async function handleDebrief(body: { sessionId?: string }) {
+async function handleDebrief(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  body: { sessionId?: string }
+) {
   const { sessionId } = body;
 
   if (!sessionId) {
-    return NextResponse.json(
-      { error: "Missing sessionId" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Missing sessionId" }, { status: 400 });
   }
 
-  const manager = sessions.get(sessionId);
-  if (!manager) {
-    return NextResponse.json(
-      { error: "Session not found." },
-      { status: 404 }
-    );
+  // Load session
+  const { data: session, error } = await supabase
+    .from("practice_sessions")
+    .select("*")
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .single();
+
+  if (error || !session) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
 
-  // Generate comprehensive debrief
-  const debrief = await manager.generateDebrief();
+  // Build transcript
+  const messages = session.messages || [];
+  const transcript = messages
+    .map((m: { role: string; content: string }) =>
+      `${m.role === "interviewer" ? "INTERVIEWER" : "CANDIDATE"}: ${m.content}`
+    )
+    .join("\n\n");
 
-  // Also expose the per-turn internal assessments
-  const assessments = manager.getAssessments();
+  // Generate debrief
+  const debriefPrompt = `Analyze this practice interview and provide a comprehensive debrief.
 
-  // Clean up session
-  sessions.delete(sessionId);
+TRANSCRIPT:
+${transcript}
+
+Provide your analysis as JSON:
+{
+  "overall_score": 1-10,
+  "hiring_prediction": "likely_hire" | "maybe" | "unlikely",
+  "strengths": ["list of things done well"],
+  "areas_for_improvement": ["specific areas to work on"],
+  "key_moments": [
+    { "turn": 1, "what_happened": "...", "impact": "positive/negative", "suggestion": "..." }
+  ],
+  "next_session_focus": "What to practice next time"
+}`;
+
+  const client = new Anthropic();
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: DEBRIEF_MAX_TOKENS,
+    temperature: 0.3,
+    messages: [{ role: "user", content: debriefPrompt }],
+  });
+
+  const textBlock = response.content.find((b) => b.type === "text");
+  const responseText = textBlock?.type === "text" ? textBlock.text : "";
+
+  let debrief;
+  try {
+    const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonStr = jsonMatch ? jsonMatch[1].trim() : responseText.trim();
+    debrief = JSON.parse(jsonStr);
+  } catch {
+    debrief = { raw_analysis: responseText };
+  }
+
+  // Update session status
+  await supabase
+    .from("practice_sessions")
+    .update({
+      status: "debriefed",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", sessionId);
 
   return NextResponse.json({
     success: true,
     sessionId,
     debrief,
-    turnAssessments: assessments,
-    sessionStatus: "debriefing",
   });
 }
 
 // ─────────────────────────────────────────────
-// ACTION: GENERATE AVATAR
+// ACTION: LIST (get user's sessions)
 // ─────────────────────────────────────────────
 
-async function handleGenerateAvatar(body: {
-  sourceImage?: string;
-  interviewerName?: string;
-  fidelity?: AvatarConfig["fidelity"];
-  avatarProvider?: AvatarConfig["avatarProvider"];
-  ttsProvider?: AvatarConfig["ttsProvider"];
-  voiceProfile?: AvatarConfig["voiceProfile"];
-  interviewer?: { name: string; current_role: string; communication_style: { formality?: string; pace_preference?: string } };
-}) {
-  const {
-    sourceImage,
-    interviewerName,
-    fidelity,
-    avatarProvider,
-    ttsProvider,
-    voiceProfile,
-    interviewer, // Optional: pass the interviewer model for voice inference
-  } = body;
+async function handleList(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  body: { jobId?: string }
+) {
+  const { jobId } = body;
 
-  if (!sourceImage || !interviewerName) {
-    return NextResponse.json(
-      { error: "Missing sourceImage or interviewerName" },
-      { status: 400 }
-    );
+  let query = supabase
+    .from("practice_sessions")
+    .select("id, job_id, mode, difficulty, status, created_at, updated_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (jobId) {
+    query = query.eq("job_id", jobId);
   }
 
-  // Infer voice profile from interviewer model if not provided
-  const resolvedVoiceProfile = voiceProfile ||
-    (interviewer ? inferVoiceProfile(interviewer) : undefined);
+  const { data: sessions, error } = await query.limit(20);
 
-  const config: AvatarConfig = {
-    sourceImage,
-    interviewerName,
-    fidelity: fidelity || "stylized",
-    avatarProvider: avatarProvider || "placeholder",
-    ttsProvider: ttsProvider || "browser_native",
-    voiceProfile: resolvedVoiceProfile,
-  };
+  if (error) {
+    return NextResponse.json({ error: "Failed to fetch sessions" }, { status: 500 });
+  }
 
-  const engine = new AvatarEngine(config);
-  const avatar = await engine.generateAvatar();
-
-  // Cache the avatar engine for the session
-  avatars.set(avatar.meta.cacheKey, { engine, avatar });
-
-  // Estimate costs for the session
-  const costEstimate = estimateAvatarCost(config.avatarProvider, 20);
-
-  return NextResponse.json({
-    success: true,
-    avatar: {
-      staticImageUrl: avatar.staticImageUrl,
-      avatarId: avatar.avatarId,
-      provider: avatar.provider,
-      fidelity: avatar.fidelity,
-      cacheKey: avatar.meta.cacheKey,
-    },
-    voiceProfile: resolvedVoiceProfile,
-    costEstimate,
-  });
+  return NextResponse.json({ sessions });
 }
 
 // ─────────────────────────────────────────────
-// GET — Usage documentation
+// GET — Resume a session
 // ─────────────────────────────────────────────
 
-export async function GET() {
-  return NextResponse.json({
-    feature: "Interviewer Model — Practice Mode",
-    tagline: "Prepare with an AI model that thinks like your interviewer.",
-    actions: {
-      generate_avatar: {
-        description: "Create a visual avatar from a public photo",
-        required: ["sourceImage", "interviewerName"],
-        optional: ["fidelity", "avatarProvider", "ttsProvider", "voiceProfile"],
-        providers: ["heygen", "d-id", "simli", "placeholder"],
+export async function GET(request: NextRequest) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const sessionId = searchParams.get("sessionId");
+
+    if (!sessionId) {
+      return NextResponse.json({ error: "sessionId required" }, { status: 400 });
+    }
+
+    const { data: session, error } = await supabase
+      .from("practice_sessions")
+      .select("*")
+      .eq("id", sessionId)
+      .eq("user_id", user.id)
+      .single();
+
+    if (error || !session) {
+      return NextResponse.json({ error: "Session not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      session: {
+        id: session.id,
+        mode: session.mode,
+        difficulty: session.difficulty,
+        status: session.status,
+        messages: session.messages,
+        createdAt: session.created_at,
       },
-      start: {
-        description: "Begin a practice interview session",
-        required: ["briefing"],
-        optional: ["interviewerIndex", "mode", "difficulty", "candidateNotes", "maxTurns", "avatarConfig"],
-        modes: ["full_interview", "rapid_fire", "stress_test", "rapport_only"],
-        difficulties: ["friendly", "neutral", "tough"],
-      },
-      respond: {
-        description: "Send a candidate response, receive interviewer reply",
-        required: ["sessionId", "message"],
-        optional: ["avatarCacheKey"],
-      },
-      debrief: {
-        description: "End the interview and get performance analysis",
-        required: ["sessionId"],
-      },
-    },
-    flow: [
-      "1. Generate Interviewer Model (POST /api/interviewer-model/generate)",
-      "2. Generate Avatar (POST /api/interviewer-model/practice { action: 'generate_avatar' })",
-      "3. Start Practice (POST /api/interviewer-model/practice { action: 'start', briefing: ... })",
-      "4. Candidate responds → Interviewer replies (loop { action: 'respond' })",
-      "5. Debrief (POST /api/interviewer-model/practice { action: 'debrief' })",
-    ],
-  });
+    });
+  } catch (error) {
+    console.error("Get session error:", error);
+    return NextResponse.json({ error: "Failed to get session" }, { status: 500 });
+  }
 }
