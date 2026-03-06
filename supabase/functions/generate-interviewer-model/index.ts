@@ -147,7 +147,7 @@ Respond ONLY with valid JSON matching this schema. No markdown, no preamble, no 
 }
 </output_format>
 
-Generate 8-12 predicted questions. Be specific to both the interviewer AND the candidate.`;
+Generate 5-7 predicted questions. Be specific to both the interviewer AND the candidate. Keep descriptions concise.`;
 
 // Build user message
 function buildUserMessage(input: {
@@ -231,17 +231,24 @@ Deno.serve(async (req) => {
       { temperature: 0.3, maxTokens: 8192 }
     );
 
-    // Parse JSON response
-    const cleaned = response
-      .replace(/^```json\s*/i, '')
-      .replace(/\s*```$/i, '')
-      .trim();
+    // Parse JSON response - handle markdown code blocks
+    let cleaned = response.trim();
+
+    // Remove markdown code blocks if present
+    const jsonMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      cleaned = jsonMatch[1].trim();
+    } else {
+      cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+    }
 
     let briefing;
     try {
       briefing = JSON.parse(cleaned);
     } catch (parseError) {
       console.error('[Interviewer Model] JSON parse failed:', parseError);
+      console.error('[Interviewer Model] Response length:', response.length);
+      console.error('[Interviewer Model] Last 200 chars:', response.substring(response.length - 200));
 
       // Update status to failed
       await supabase
