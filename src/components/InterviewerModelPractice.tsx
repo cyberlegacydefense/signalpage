@@ -107,25 +107,46 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
   const [sessionStatus, setSessionStatus] = useState<'active' | 'completed'>('active');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Fetch job data (resume + JD) on mount
+  // Fetch job data and existing interviewer model on mount
   useEffect(() => {
-    async function fetchJobData() {
+    async function fetchData() {
       try {
-        const response = await fetch(`/api/jobs/${jobId}`);
-        if (response.ok) {
-          const data = await response.json();
+        // Fetch job data
+        const jobResponse = await fetch(`/api/jobs/${jobId}`);
+        if (jobResponse.ok) {
+          const data = await jobResponse.json();
           setJobData({
             resume: data.resume_text || '',
             jobDescription: data.job_description || '',
           });
         }
+
+        // Check for existing interviewer model
+        const modelResponse = await fetch(`/api/interviewer-model/generate?jobId=${jobId}`);
+        if (modelResponse.ok) {
+          const modelData = await modelResponse.json();
+          if (modelData.status === 'completed' && modelData.briefing) {
+            setBriefing(modelData.briefing);
+            setStep('view_model');
+            // Try to extract interviewer info from briefing
+            const firstInterviewer = modelData.briefing.interviewer_models?.[0];
+            if (firstInterviewer) {
+              setInterviewer(prev => ({
+                ...prev,
+                name: firstInterviewer.name || '',
+                currentRole: firstInterviewer.current_role || '',
+                company: firstInterviewer.company || '',
+              }));
+            }
+          }
+        }
       } catch (err) {
-        console.error('Failed to fetch job data:', err);
+        console.error('Failed to fetch data:', err);
       } finally {
         setIsLoadingJob(false);
       }
     }
-    fetchJobData();
+    fetchData();
   }, [jobId]);
 
   // Auto-scroll to bottom of messages
