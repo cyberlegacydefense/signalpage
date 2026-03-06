@@ -3,6 +3,7 @@
  *
  * "Prepare with an AI model that thinks like your interviewer."
  *
+ * Supports multiple interviewers per job.
  * Uses fire-and-forget pattern like Interview Prep to avoid timeouts.
  */
 
@@ -64,50 +65,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Parse interviewer profiles
-    const parsedInterviewers = interviewers.map(
-      (interviewer: {
-        name?: string;
-        currentRole?: string;
-        company?: string;
-        linkedinPaste?: string;
-        linkedinText?: string;
-        additionalContext?: string;
-      }) => {
-        const profile: {
-          name: string;
-          currentRole?: string;
-          company?: string;
-          linkedinText?: string;
-          additionalContext?: string;
-        } = {
-          name: interviewer.name || "Unknown",
-          currentRole: interviewer.currentRole,
-          company: interviewer.company,
-          additionalContext: interviewer.additionalContext,
-        };
+    // Parse interviewer profiles (expecting single interviewer per request now)
+    const interviewer = interviewers[0];
+    const profile: {
+      name: string;
+      currentRole?: string;
+      company?: string;
+      linkedinText?: string;
+      additionalContext?: string;
+    } = {
+      name: interviewer.name || "Unknown",
+      currentRole: interviewer.currentRole,
+      company: interviewer.company,
+      additionalContext: interviewer.additionalContext,
+    };
 
-        if (interviewer.linkedinPaste) {
-          const parsed = parseLinkedInPaste(interviewer.linkedinPaste);
-          profile.linkedinText = parsed.rawCleaned;
-          if (!profile.name || profile.name === "Unknown") profile.name = parsed.name;
-          if (!profile.currentRole) profile.currentRole = parsed.headline;
-        }
+    if (interviewer.linkedinPaste) {
+      const parsed = parseLinkedInPaste(interviewer.linkedinPaste);
+      profile.linkedinText = parsed.rawCleaned;
+      if (!profile.name || profile.name === "Unknown") profile.name = parsed.name;
+      if (!profile.currentRole) profile.currentRole = parsed.headline;
+    }
 
-        if (interviewer.linkedinText) {
-          profile.linkedinText = interviewer.linkedinText;
-        }
+    if (interviewer.linkedinText) {
+      profile.linkedinText = interviewer.linkedinText;
+    }
 
-        return profile;
-      }
-    );
+    const interviewerName = profile.name;
 
-    // Check for existing record
+    // Check for existing record for this specific interviewer
     const { data: existing } = await supabase
       .from("interviewer_models")
       .select("status, briefing")
       .eq("job_id", jobId)
       .eq("user_id", user.id)
+      .eq("interviewer_name", interviewerName)
       .maybeSingle();
 
     // If already completed, return it
@@ -116,6 +108,7 @@ export async function POST(request: NextRequest) {
         success: true,
         status: "completed",
         briefing: existing.briefing,
+        interviewerName,
       });
     }
 
@@ -125,6 +118,7 @@ export async function POST(request: NextRequest) {
         success: true,
         status: "generating",
         message: "Generation in progress",
+        interviewerName,
       });
     }
 
@@ -134,12 +128,13 @@ export async function POST(request: NextRequest) {
       .upsert({
         job_id: jobId,
         user_id: user.id,
+        interviewer_name: interviewerName,
         status: "generating",
         briefing: null,
         error_message: null,
         updated_at: new Date().toISOString(),
       }, {
-        onConflict: "job_id,user_id",
+        onConflict: "job_id,user_id,interviewer_name",
       });
 
     if (upsertError) {
@@ -155,7 +150,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
     }
 
-    console.log("[Interviewer Model] Triggering edge function...");
+    console.log("[Interviewer Model] Triggering edge function for:", interviewerName);
 
     fetch(`${supabaseUrl}/functions/v1/clever-api`, {
       method: "POST",
@@ -168,7 +163,8 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         resume,
         jobDescription,
-        interviewers: parsedInterviewers,
+        interviewerName,
+        interviewers: [profile],
       }),
     }).catch((err) => {
       console.error("[Interviewer Model] Edge function trigger error:", err);
@@ -178,6 +174,7 @@ export async function POST(request: NextRequest) {
       success: true,
       status: "generating",
       message: "Generation started",
+      interviewerName,
     });
   } catch (error: unknown) {
     console.error("Interviewer Model generation failed:", error);
@@ -188,7 +185,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET endpoint to poll for status
+// GET endpoint to fetch all interviewers for a job
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -200,33 +197,90 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const jobId = searchParams.get("jobId");
+    const interviewerName = searchParams.get("interviewerName");
 
     if (!jobId) {
       return NextResponse.json({ error: "jobId required" }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    // If specific interviewer requested, return just that one
+    if (interviewerName) {
+      const { data, error } = await supabase
+        .from("interviewer_models")
+        .select("id, interviewer_name, status, briefing, error_message, created_at")
+        .eq("job_id", jobId)
+        .eq("user_id", user.id)
+        .eq("interviewer_name", interviewerName)
+        .maybeSingle();
+
+      if (error) {
+        return NextResponse.json({ error: "Failed to fetch interviewer" }, { status: 500 });
+      }
+
+      if (!data) {
+        return NextResponse.json({ status: "not_found" });
+      }
+
+      return NextResponse.json({
+        status: data.status,
+        briefing: data.briefing,
+        errorMessage: data.error_message,
+        interviewerName: data.interviewer_name,
+      });
+    }
+
+    // Return all interviewers for the job
+    const { data: interviewers, error } = await supabase
       .from("interviewer_models")
-      .select("status, briefing, error_message")
+      .select("id, interviewer_name, status, briefing, error_message, created_at")
       .eq("job_id", jobId)
       .eq("user_id", user.id)
-      .maybeSingle();
+      .order("created_at", { ascending: true });
 
     if (error) {
-      return NextResponse.json({ error: "Failed to fetch status" }, { status: 500 });
+      return NextResponse.json({ error: "Failed to fetch interviewers" }, { status: 500 });
     }
 
-    if (!data) {
-      return NextResponse.json({ status: "not_started" });
-    }
-
-    return NextResponse.json({
-      status: data.status,
-      briefing: data.briefing,
-      errorMessage: data.error_message,
-    });
+    return NextResponse.json({ interviewers: interviewers || [] });
   } catch (error) {
-    console.error("Interviewer Model status check failed:", error);
-    return NextResponse.json({ error: "Failed to check status" }, { status: 500 });
+    console.error("Interviewer Model fetch failed:", error);
+    return NextResponse.json({ error: "Failed to fetch interviewers" }, { status: 500 });
+  }
+}
+
+// DELETE endpoint to remove a specific interviewer
+export async function DELETE(request: NextRequest) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const jobId = searchParams.get("jobId");
+    const interviewerName = searchParams.get("interviewerName");
+
+    if (!jobId || !interviewerName) {
+      return NextResponse.json({ error: "jobId and interviewerName required" }, { status: 400 });
+    }
+
+    const { error } = await supabase
+      .from("interviewer_models")
+      .delete()
+      .eq("job_id", jobId)
+      .eq("user_id", user.id)
+      .eq("interviewer_name", interviewerName);
+
+    if (error) {
+      console.error("[Interviewer Model] Delete failed:", error);
+      return NextResponse.json({ error: "Failed to delete interviewer" }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Interviewer Model delete failed:", error);
+    return NextResponse.json({ error: "Failed to delete interviewer" }, { status: 500 });
   }
 }

@@ -40,6 +40,15 @@ interface Briefing {
   }>;
 }
 
+interface InterviewerModel {
+  id: string;
+  interviewer_name: string;
+  status: 'pending' | 'generating' | 'completed' | 'failed';
+  briefing: Briefing | null;
+  error_message: string | null;
+  created_at: string;
+}
+
 interface PracticeSession {
   sessionId: string;
   interviewer: { name: string; role: string; company: string };
@@ -66,7 +75,7 @@ interface Debrief {
 
 type Mode = 'full_interview' | 'rapid_fire' | 'stress_test' | 'rapport_only';
 type Difficulty = 'friendly' | 'neutral' | 'tough';
-type Step = 'add_interviewer' | 'view_model' | 'practice' | 'debrief';
+type Step = 'list' | 'add_interviewer' | 'view_model' | 'practice' | 'debrief';
 
 const MODE_INFO: Record<Mode, { label: string; description: string; turns: string }> = {
   full_interview: { label: 'Full Interview', description: 'Complete simulation from opening to close', turns: '~20 turns' },
@@ -82,32 +91,42 @@ const DIFFICULTY_INFO: Record<Difficulty, { label: string; description: string }
 };
 
 export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelPracticeProps) {
-  const [step, setStep] = useState<Step>('add_interviewer');
+  const [step, setStep] = useState<Step>('list');
   const [jobData, setJobData] = useState<{ resume: string; jobDescription: string } | null>(null);
   const [isLoadingJob, setIsLoadingJob] = useState(true);
-  const [interviewer, setInterviewer] = useState<InterviewerInput>({
+
+  // List of all interviewers for this job
+  const [interviewers, setInterviewers] = useState<InterviewerModel[]>([]);
+  const [selectedInterviewer, setSelectedInterviewer] = useState<InterviewerModel | null>(null);
+
+  // Form for adding new interviewer
+  const [newInterviewer, setNewInterviewer] = useState<InterviewerInput>({
     name: '',
     linkedinPaste: '',
     currentRole: '',
     company: '',
     photoUrl: '',
   });
-  const [briefing, setBriefing] = useState<Briefing | null>(null);
+
+  // Practice state
   const [session, setSession] = useState<PracticeSession | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [debrief, setDebrief] = useState<Debrief | null>(null);
   const [candidateInput, setCandidateInput] = useState('');
   const [mode, setMode] = useState<Mode>('full_interview');
   const [difficulty, setDifficulty] = useState<Difficulty>('neutral');
+
+  // Loading states
   const [isGenerating, setIsGenerating] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isDebriefing, setIsDebriefing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionStatus, setSessionStatus] = useState<'active' | 'completed'>('active');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Fetch job data and existing interviewer model on mount
+  // Fetch job data and existing interviewers on mount
   useEffect(() => {
     async function fetchData() {
       try {
@@ -121,25 +140,8 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
           });
         }
 
-        // Check for existing interviewer model
-        const modelResponse = await fetch(`/api/interviewer-model/generate?jobId=${jobId}`);
-        if (modelResponse.ok) {
-          const modelData = await modelResponse.json();
-          if (modelData.status === 'completed' && modelData.briefing) {
-            setBriefing(modelData.briefing);
-            setStep('view_model');
-            // Try to extract interviewer info from briefing
-            const firstInterviewer = modelData.briefing.interviewer_models?.[0];
-            if (firstInterviewer) {
-              setInterviewer(prev => ({
-                ...prev,
-                name: firstInterviewer.name || '',
-                currentRole: firstInterviewer.current_role || '',
-                company: firstInterviewer.company || '',
-              }));
-            }
-          }
-        }
+        // Fetch all interviewers for this job
+        await refreshInterviewers();
       } catch (err) {
         console.error('Failed to fetch data:', err);
       } finally {
@@ -149,13 +151,26 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
     fetchData();
   }, [jobId]);
 
+  // Refresh interviewers list
+  const refreshInterviewers = async () => {
+    try {
+      const response = await fetch(`/api/interviewer-model/generate?jobId=${jobId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setInterviewers(data.interviewers || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch interviewers:', err);
+    }
+  };
+
   // Auto-scroll to bottom of messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const generateModel = async () => {
-    if (!interviewer.name || !interviewer.linkedinPaste) {
+    if (!newInterviewer.name || !newInterviewer.linkedinPaste) {
       setError('Please provide at least a name and LinkedIn profile');
       return;
     }
@@ -178,10 +193,10 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
           resume: jobData.resume,
           jobDescription: jobData.jobDescription,
           interviewers: [{
-            name: interviewer.name,
-            linkedinPaste: interviewer.linkedinPaste,
-            currentRole: interviewer.currentRole,
-            company: interviewer.company,
+            name: newInterviewer.name,
+            linkedinPaste: newInterviewer.linkedinPaste,
+            currentRole: newInterviewer.currentRole,
+            company: newInterviewer.company,
           }],
         }),
       });
@@ -192,11 +207,22 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
       }
 
       const data = await response.json();
+      const interviewerName = data.interviewerName || newInterviewer.name;
 
-      // If already completed, use the result
+      // If already completed, refresh and select
       if (data.status === 'completed' && data.briefing) {
-        setBriefing(data.briefing);
-        setStep('view_model');
+        await refreshInterviewers();
+        // Find and select the new interviewer
+        const response2 = await fetch(`/api/interviewer-model/generate?jobId=${jobId}`);
+        const data2 = await response2.json();
+        const newModel = data2.interviewers?.find((i: InterviewerModel) => i.interviewer_name === interviewerName);
+        if (newModel) {
+          setSelectedInterviewer(newModel);
+          setStep('view_model');
+        } else {
+          setStep('list');
+        }
+        setNewInterviewer({ name: '', linkedinPaste: '', currentRole: '', company: '', photoUrl: '' });
         setIsGenerating(false);
         return;
       }
@@ -207,15 +233,27 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
         let attempts = 0;
 
         while (attempts < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+          await new Promise(resolve => setTimeout(resolve, 1000));
           attempts++;
 
-          const statusResponse = await fetch(`/api/interviewer-model/generate?jobId=${jobId}`);
+          const statusResponse = await fetch(
+            `/api/interviewer-model/generate?jobId=${jobId}&interviewerName=${encodeURIComponent(interviewerName)}`
+          );
           const statusData = await statusResponse.json();
 
           if (statusData.status === 'completed' && statusData.briefing) {
-            setBriefing(statusData.briefing);
-            setStep('view_model');
+            await refreshInterviewers();
+            // Find and select the new interviewer
+            const response2 = await fetch(`/api/interviewer-model/generate?jobId=${jobId}`);
+            const data2 = await response2.json();
+            const newModel = data2.interviewers?.find((i: InterviewerModel) => i.interviewer_name === interviewerName);
+            if (newModel) {
+              setSelectedInterviewer(newModel);
+              setStep('view_model');
+            } else {
+              setStep('list');
+            }
+            setNewInterviewer({ name: '', linkedinPaste: '', currentRole: '', company: '', photoUrl: '' });
             return;
           }
 
@@ -235,8 +273,38 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
     }
   };
 
+  const deleteInterviewer = async (interviewer: InterviewerModel) => {
+    if (!confirm(`Delete ${interviewer.interviewer_name}? This cannot be undone.`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setError(null);
+
+    try {
+      const response = await fetch(
+        `/api/interviewer-model/generate?jobId=${jobId}&interviewerName=${encodeURIComponent(interviewer.interviewer_name)}`,
+        { method: 'DELETE' }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to delete interviewer');
+      }
+
+      await refreshInterviewers();
+      if (selectedInterviewer?.id === interviewer.id) {
+        setSelectedInterviewer(null);
+        setStep('list');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete interviewer');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const startPractice = async () => {
-    if (!briefing) return;
+    if (!selectedInterviewer?.briefing) return;
 
     setIsStarting(true);
     setError(null);
@@ -247,7 +315,7 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'start',
-          briefing,
+          briefing: selectedInterviewer.briefing,
           mode,
           difficulty,
         }),
@@ -355,14 +423,9 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
     }
   };
 
-  const resetAll = () => {
-    setStep('add_interviewer');
-    setBriefing(null);
-    setSession(null);
-    setMessages([]);
-    setDebrief(null);
-    setSessionStatus('active');
-    setError(null);
+  const backToList = () => {
+    setSelectedInterviewer(null);
+    setStep('list');
   };
 
   const startNewSession = () => {
@@ -371,6 +434,11 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
     setDebrief(null);
     setSessionStatus('active');
     setStep('view_model');
+  };
+
+  // Get initials for avatar
+  const getInitials = (name: string) => {
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
   if (!hasAccess) {
@@ -408,17 +476,148 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
     );
   }
 
-  // Step 1: Add Interviewer
+  // Step: List of interviewers
+  if (step === 'list') {
+    return (
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <svg className="h-5 w-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              Your Interviewers
+            </CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-6 text-sm text-gray-600">
+            Build AI models of your interviewers from their LinkedIn profiles. Practice with personas that think, speak, and evaluate like them.
+          </p>
+
+          {error && (
+            <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Existing interviewers */}
+            {interviewers.map((interviewer) => {
+              const model = interviewer.briefing?.interviewer_models?.[0];
+              const isComplete = interviewer.status === 'completed' && model;
+              const isGenerating = interviewer.status === 'generating';
+              const isFailed = interviewer.status === 'failed';
+
+              return (
+                <div
+                  key={interviewer.id}
+                  className={`rounded-lg border-2 p-4 transition-all ${
+                    isComplete
+                      ? 'border-gray-200 hover:border-purple-300 cursor-pointer'
+                      : isGenerating
+                      ? 'border-purple-200 bg-purple-50'
+                      : 'border-red-200 bg-red-50'
+                  }`}
+                  onClick={() => {
+                    if (isComplete) {
+                      setSelectedInterviewer(interviewer);
+                      setStep('view_model');
+                    }
+                  }}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`flex h-12 w-12 items-center justify-center rounded-full text-lg font-semibold ${
+                        isComplete ? 'bg-purple-100 text-purple-700' :
+                        isGenerating ? 'bg-purple-200 text-purple-800' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {isGenerating ? (
+                          <div className="h-5 w-5 animate-spin rounded-full border-2 border-purple-700 border-t-transparent" />
+                        ) : (
+                          getInitials(interviewer.interviewer_name)
+                        )}
+                      </div>
+                      <div>
+                        <div className="font-medium text-gray-900">{interviewer.interviewer_name}</div>
+                        {model && (
+                          <div className="text-sm text-gray-500">{model.current_role}</div>
+                        )}
+                        {isGenerating && (
+                          <div className="text-xs text-purple-600">Generating model...</div>
+                        )}
+                        {isFailed && (
+                          <div className="text-xs text-red-600">{interviewer.error_message || 'Failed'}</div>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteInterviewer(interviewer);
+                      }}
+                      disabled={isDeleting}
+                      className="text-gray-400 hover:text-red-500 transition-colors"
+                      title="Delete interviewer"
+                    >
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                  {isComplete && (
+                    <div className="mt-4">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className="w-full bg-gradient-to-r from-purple-600 to-indigo-600"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedInterviewer(interviewer);
+                          setStep('view_model');
+                        }}
+                      >
+                        Practice
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Add new interviewer card */}
+            <div
+              onClick={() => setStep('add_interviewer')}
+              className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 p-6 transition-colors hover:border-purple-400 hover:bg-purple-50"
+            >
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
+                <svg className="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </div>
+              <span className="mt-2 text-sm font-medium text-gray-600">Add Interviewer</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Step: Add Interviewer
   if (step === 'add_interviewer') {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <svg className="h-5 w-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-            Practice with Your Interviewer
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <svg className="h-5 w-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
+              Add Interviewer
+            </CardTitle>
+            <Button variant="outline" size="sm" onClick={backToList}>
+              Cancel
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
           <p className="text-sm text-gray-600">
@@ -433,8 +632,8 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
                 </label>
                 <input
                   type="text"
-                  value={interviewer.name}
-                  onChange={(e) => setInterviewer(prev => ({ ...prev, name: e.target.value }))}
+                  value={newInterviewer.name}
+                  onChange={(e) => setNewInterviewer(prev => ({ ...prev, name: e.target.value }))}
                   placeholder="Jane Smith"
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
                 />
@@ -443,8 +642,8 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
                 <label className="mb-1.5 block text-sm font-medium text-gray-700">Company</label>
                 <input
                   type="text"
-                  value={interviewer.company}
-                  onChange={(e) => setInterviewer(prev => ({ ...prev, company: e.target.value }))}
+                  value={newInterviewer.company}
+                  onChange={(e) => setNewInterviewer(prev => ({ ...prev, company: e.target.value }))}
                   placeholder="TechCorp"
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
                 />
@@ -455,8 +654,8 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
               <label className="mb-1.5 block text-sm font-medium text-gray-700">Current Role</label>
               <input
                 type="text"
-                value={interviewer.currentRole}
-                onChange={(e) => setInterviewer(prev => ({ ...prev, currentRole: e.target.value }))}
+                value={newInterviewer.currentRole}
+                onChange={(e) => setNewInterviewer(prev => ({ ...prev, currentRole: e.target.value }))}
                 placeholder="VP of Engineering"
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
               />
@@ -470,23 +669,10 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
                 Go to their LinkedIn profile, select all (Cmd+A / Ctrl+A), copy (Cmd+C / Ctrl+C), and paste below.
               </p>
               <textarea
-                value={interviewer.linkedinPaste}
-                onChange={(e) => setInterviewer(prev => ({ ...prev, linkedinPaste: e.target.value }))}
+                value={newInterviewer.linkedinPaste}
+                onChange={(e) => setNewInterviewer(prev => ({ ...prev, linkedinPaste: e.target.value }))}
                 placeholder="Paste the full LinkedIn profile content here..."
                 rows={6}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                Photo URL <span className="text-gray-400 text-xs font-normal">(optional, for avatar)</span>
-              </label>
-              <input
-                type="url"
-                value={interviewer.photoUrl}
-                onChange={(e) => setInterviewer(prev => ({ ...prev, photoUrl: e.target.value }))}
-                placeholder="https://..."
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
               />
             </div>
@@ -496,15 +682,20 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
             <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>
           )}
 
-          <Button
-            variant="primary"
-            onClick={generateModel}
-            isLoading={isGenerating}
-            disabled={isGenerating || !interviewer.name || !interviewer.linkedinPaste}
-            className="w-full bg-gradient-to-r from-purple-600 to-indigo-600"
-          >
-            {isGenerating ? 'Building Interviewer Model...' : 'Build Interviewer Model'}
-          </Button>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={backToList} className="flex-1">
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={generateModel}
+              isLoading={isGenerating}
+              disabled={isGenerating || !newInterviewer.name || !newInterviewer.linkedinPaste}
+              className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600"
+            >
+              {isGenerating ? 'Building Model...' : 'Build Interviewer Model'}
+            </Button>
+          </div>
 
           <p className="text-xs text-center text-gray-500">
             This typically takes 30-60 seconds
@@ -514,8 +705,9 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
     );
   }
 
-  // Step 2: View Model
-  if (step === 'view_model' && briefing) {
+  // Step: View Model
+  if (step === 'view_model' && selectedInterviewer?.briefing) {
+    const briefing = selectedInterviewer.briefing;
     const model = briefing.interviewer_models[0];
 
     return (
@@ -525,20 +717,25 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 text-purple-700 font-semibold">
-                  {model.name.split(' ').map(n => n[0]).join('')}
+                  {getInitials(model.name)}
                 </div>
                 <div>
                   <div className="text-lg">{model.name}</div>
                   <div className="text-sm font-normal text-gray-500">{model.current_role} at {model.company}</div>
                 </div>
               </CardTitle>
-              <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                briefing.meta.model_confidence === 'HIGH' ? 'bg-green-100 text-green-700' :
-                briefing.meta.model_confidence === 'MEDIUM' ? 'bg-yellow-100 text-yellow-700' :
-                'bg-gray-100 text-gray-700'
-              }`}>
-                {briefing.meta.model_confidence} Confidence
-              </span>
+              <div className="flex items-center gap-2">
+                <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                  briefing.meta.model_confidence === 'HIGH' ? 'bg-green-100 text-green-700' :
+                  briefing.meta.model_confidence === 'MEDIUM' ? 'bg-yellow-100 text-yellow-700' :
+                  'bg-gray-100 text-gray-700'
+                }`}>
+                  {briefing.meta.model_confidence} Confidence
+                </span>
+                <Button variant="outline" size="sm" onClick={backToList}>
+                  Back
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -565,7 +762,7 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
               </p>
             </div>
 
-            {model.communication_style.language_patterns.length > 0 && (
+            {model.communication_style.language_patterns?.length > 0 && (
               <div>
                 <h4 className="text-sm font-medium text-gray-700 mb-2">Mirror This Language</h4>
                 <div className="flex flex-wrap gap-2">
@@ -654,8 +851,8 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
             )}
 
             <div className="flex gap-3">
-              <Button variant="outline" onClick={resetAll}>
-                Change Interviewer
+              <Button variant="outline" onClick={backToList}>
+                Back to Interviewers
               </Button>
               <Button
                 variant="primary"
@@ -673,7 +870,7 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
     );
   }
 
-  // Step 3: Practice Session
+  // Step: Practice Session
   if (step === 'practice' && session) {
     return (
       <div className="space-y-4">
@@ -683,7 +880,7 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 text-purple-700 font-semibold">
-                  {session.interviewer.name.split(' ').map(n => n[0]).join('')}
+                  {getInitials(session.interviewer.name)}
                 </div>
                 <div>
                   <div className="font-medium text-gray-900">{session.interviewer.name}</div>
@@ -786,7 +983,7 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
     );
   }
 
-  // Step 4: Debrief
+  // Step: Debrief
   if (step === 'debrief' && debrief) {
     return (
       <div className="space-y-6">
@@ -861,8 +1058,8 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
 
         {/* Actions */}
         <div className="flex gap-3">
-          <Button variant="outline" onClick={resetAll} className="flex-1">
-            New Interviewer
+          <Button variant="outline" onClick={backToList} className="flex-1">
+            Back to Interviewers
           </Button>
           <Button
             variant="primary"

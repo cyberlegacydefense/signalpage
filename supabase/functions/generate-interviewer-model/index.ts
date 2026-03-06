@@ -208,10 +208,13 @@ Deno.serve(async (req) => {
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+  let interviewerName: string | null = null;
+
   try {
     const body = await req.json();
     jobId = body.jobId;
     userId = body.userId;
+    interviewerName = body.interviewerName;
     const { resume, jobDescription, interviewers } = body;
 
     if (!jobId || !userId || !resume || !jobDescription || !interviewers?.length) {
@@ -221,7 +224,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`[Interviewer Model] Job ${jobId}: Starting generation...`);
+    // Use interviewerName from body, or extract from first interviewer
+    if (!interviewerName && interviewers[0]?.name) {
+      interviewerName = interviewers[0].name;
+    }
+
+    console.log(`[Interviewer Model] Job ${jobId}: Starting generation for ${interviewerName}...`);
 
     const userMessage = buildUserMessage({ resume, jobDescription, interviewers });
 
@@ -251,7 +259,7 @@ Deno.serve(async (req) => {
       console.error('[Interviewer Model] Last 200 chars:', response.substring(response.length - 200));
 
       // Update status to failed
-      await supabase
+      const failQuery = supabase
         .from('interviewer_models')
         .update({
           status: 'failed',
@@ -261,6 +269,11 @@ Deno.serve(async (req) => {
         .eq('job_id', jobId)
         .eq('user_id', userId);
 
+      if (interviewerName) {
+        failQuery.eq('interviewer_name', interviewerName);
+      }
+      await failQuery;
+
       return new Response(
         JSON.stringify({ error: 'Failed to parse model response' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -268,7 +281,7 @@ Deno.serve(async (req) => {
     }
 
     // Save results to database
-    const { error: updateError } = await supabase
+    const updateQuery = supabase
       .from('interviewer_models')
       .update({
         status: 'completed',
@@ -279,12 +292,18 @@ Deno.serve(async (req) => {
       .eq('job_id', jobId)
       .eq('user_id', userId);
 
+    if (interviewerName) {
+      updateQuery.eq('interviewer_name', interviewerName);
+    }
+
+    const { error: updateError } = await updateQuery;
+
     if (updateError) {
       console.error('[Interviewer Model] Failed to save results:', updateError);
       throw updateError;
     }
 
-    console.log(`[Interviewer Model] Job ${jobId}: Complete in ${Date.now() - startTime}ms`);
+    console.log(`[Interviewer Model] Job ${jobId} (${interviewerName}): Complete in ${Date.now() - startTime}ms`);
 
     return new Response(
       JSON.stringify({ success: true }),
@@ -296,7 +315,7 @@ Deno.serve(async (req) => {
 
     // Update status to failed
     if (jobId && userId) {
-      await supabase
+      const errorQuery = supabase
         .from('interviewer_models')
         .update({
           status: 'failed',
@@ -305,6 +324,11 @@ Deno.serve(async (req) => {
         })
         .eq('job_id', jobId)
         .eq('user_id', userId);
+
+      if (interviewerName) {
+        errorQuery.eq('interviewer_name', interviewerName);
+      }
+      await errorQuery;
     }
 
     return new Response(
