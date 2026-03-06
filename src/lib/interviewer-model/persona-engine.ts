@@ -12,6 +12,12 @@
 
 import type { InterviewerModelBriefing, InterviewerAnalysis } from "./pipeline";
 
+// Helper to safely join arrays (handles undefined/null)
+const safeJoin = (arr: string[] | undefined | null, separator = ", "): string => {
+  if (!arr || !Array.isArray(arr)) return "Not specified";
+  return arr.length > 0 ? arr.join(separator) : "Not specified";
+};
+
 // ─────────────────────────────────────────────
 // TYPES
 // ─────────────────────────────────────────────
@@ -119,10 +125,10 @@ HOW YOU THINK:
 - What concerns you: ${interviewer.thinking_style.what_concerns_them}
 
 WHAT YOU VALUE:
-- Stated values: ${interviewer.values_and_priorities.stated_values.join(", ")}
-- Deep values: ${interviewer.values_and_priorities.inferred_values.join(", ")}
-- Topics that light you up: ${interviewer.values_and_priorities.hot_buttons.join(", ")}
-- Things that would make you pass on a candidate: ${interviewer.values_and_priorities.likely_dealbreakers.join(", ")}
+- Stated values: ${safeJoin(interviewer.values_and_priorities?.stated_values)}
+- Deep values: ${safeJoin(interviewer.values_and_priorities?.inferred_values)}
+- Topics that light you up: ${safeJoin(interviewer.values_and_priorities?.hot_buttons)}
+- Things that would make you pass on a candidate: ${safeJoin(interviewer.values_and_priorities?.likely_dealbreakers)}
 
 YOUR CORE HIRING QUESTION:
 ${interviewer.interview_behavior_model.hiring_lens}
@@ -139,7 +145,7 @@ function buildCommunicationRules(
 ): string {
   const baseRules = `Pace: ${interviewer.communication_style.pace_preference}
 Formality: ${interviewer.communication_style.formality}
-Language patterns you naturally use: ${interviewer.communication_style.language_patterns.join(", ")}
+Language patterns you naturally use: ${safeJoin(interviewer.communication_style?.language_patterns)}
 
 You speak the way a real ${interviewer.current_role} speaks. Your questions are conversational, not robotic. You use follow-ups like a real interviewer — "Tell me more about that," "What do you mean by...," "Walk me through the specifics."
 
@@ -168,7 +174,7 @@ function buildInterviewStructure(
 
 1. OPENING (1-2 turns): ${interviewer.interview_behavior_model.likely_opening_style}. Start the way you naturally would. Set the tone.
 
-2. BACKGROUND DIVE (3-5 turns): Explore the candidate's experience. Focus on: ${interviewer.interview_behavior_model.likely_focus_areas.join(", ")}. Go where the conversation takes you — don't follow a script.
+2. BACKGROUND DIVE (3-5 turns): Explore the candidate's experience. Focus on: ${safeJoin(interviewer.interview_behavior_model?.likely_focus_areas)}. Go where the conversation takes you — don't follow a script.
 
 3. ROLE-SPECIFIC PROBING (4-6 turns): Dig into how their experience maps to ${briefing.meta.target_role}. This is where you test depth. Follow up aggressively on vague answers.
 
@@ -181,7 +187,7 @@ function buildInterviewStructure(
 Total target: ${config.maxTurns || 20} exchanges.`,
 
     rapid_fire: `This is a focused practice round. Skip the pleasantries and dive straight into questions. Ask 8-12 questions in quick succession, covering:
-- ${interviewer.interview_behavior_model.likely_focus_areas.slice(0, 3).join("\n- ")}
+- ${safeJoin(interviewer.interview_behavior_model?.likely_focus_areas?.slice(0, 3), "\n- ")}
 
 Give brief reactions (1 sentence max) before moving to the next question. This is about volume and speed, not depth.`,
 
@@ -193,7 +199,7 @@ Give brief reactions (1 sentence max) before moving to the next question. This i
 
 You are not mean — you are thorough. The candidate should leave this feeling like they've been through the hardest version of this interview. If they can handle you at your toughest, the real interview will feel easy.
 
-Red flags you specifically watch for: ${interviewer.interview_behavior_model.red_flags_they_watch_for.join(", ")}`,
+Red flags you specifically watch for: ${safeJoin(interviewer.interview_behavior_model?.red_flags_they_watch_for)}`,
 
     rapport_only: `Focus entirely on the first 3-5 minutes of the interview — the rapport-building phase. Practice small talk, opening remarks, and the transition from casual to professional. This is where first impressions are made.
 
@@ -263,7 +269,7 @@ function buildAssessmentBehavior(
 1. Did they answer the actual question or deflect?
 2. Did they provide specific examples or stay abstract?
 3. Did they demonstrate the competency you were probing for?
-4. Did any red flags appear? (${interviewer.interview_behavior_model.red_flags_they_watch_for.join(", ")})
+4. Did any red flags appear? (${safeJoin(interviewer.interview_behavior_model?.red_flags_they_watch_for)})
 5. How does this response affect your overall hiring confidence?
 
 Known vulnerability areas for this candidate (probe these naturally):
