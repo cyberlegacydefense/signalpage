@@ -148,10 +148,12 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
     setError(null);
 
     try {
+      // Trigger generation
       const response = await fetch('/api/interviewer-model/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          jobId,
           resume: jobData.resume,
           jobDescription: jobData.jobDescription,
           interviewers: [{
@@ -169,8 +171,42 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
       }
 
       const data = await response.json();
-      setBriefing(data.briefing);
-      setStep('view_model');
+
+      // If already completed, use the result
+      if (data.status === 'completed' && data.briefing) {
+        setBriefing(data.briefing);
+        setStep('view_model');
+        setIsGenerating(false);
+        return;
+      }
+
+      // Poll for completion
+      const pollForCompletion = async () => {
+        const maxAttempts = 60; // 60 seconds max
+        let attempts = 0;
+
+        while (attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+          attempts++;
+
+          const statusResponse = await fetch(`/api/interviewer-model/generate?jobId=${jobId}`);
+          const statusData = await statusResponse.json();
+
+          if (statusData.status === 'completed' && statusData.briefing) {
+            setBriefing(statusData.briefing);
+            setStep('view_model');
+            return;
+          }
+
+          if (statusData.status === 'failed') {
+            throw new Error(statusData.errorMessage || 'Generation failed');
+          }
+        }
+
+        throw new Error('Generation timed out');
+      };
+
+      await pollForCompletion();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate interviewer model');
     } finally {

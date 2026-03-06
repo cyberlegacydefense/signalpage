@@ -1,5 +1,7 @@
 // Supabase Edge Function for Interviewer Model Generation
-// Runs in Deno with longer timeout than Netlify
+// Uses async pattern - saves results to database
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -43,7 +45,7 @@ async function callClaude(
   return textBlock?.text || '';
 }
 
-// System prompt for Interviewer Model
+// System prompt
 const INTERVIEWER_MODEL_SYSTEM_PROMPT = `You are the Interviewer Model engine built into SignalPage.ai. Your purpose is to construct an AI representation of a specific interviewer so the candidate can prepare with a model that thinks like the person they're about to meet.
 
 <role>
@@ -198,19 +200,28 @@ Deno.serve(async (req) => {
   }
 
   const startTime = Date.now();
+  let jobId: string | null = null;
+  let userId: string | null = null;
+
+  // Create Supabase client
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
     const body = await req.json();
+    jobId = body.jobId;
+    userId = body.userId;
     const { resume, jobDescription, interviewers } = body;
 
-    if (!resume || !jobDescription || !interviewers?.length) {
+    if (!jobId || !userId || !resume || !jobDescription || !interviewers?.length) {
       return new Response(
-        JSON.stringify({ error: 'Missing required fields: resume, jobDescription, interviewers' }),
+        JSON.stringify({ error: 'Missing required fields' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`[Interviewer Model] Starting generation for ${interviewers.length} interviewer(s)...`);
+    console.log(`[Interviewer Model] Job ${jobId}: Starting generation...`);
 
     const userMessage = buildUserMessage({ resume, jobDescription, interviewers });
 
@@ -231,25 +242,63 @@ Deno.serve(async (req) => {
       briefing = JSON.parse(cleaned);
     } catch (parseError) {
       console.error('[Interviewer Model] JSON parse failed:', parseError);
-      console.error('[Interviewer Model] Raw response (first 500 chars):', response.substring(0, 500));
+
+      // Update status to failed
+      await supabase
+        .from('interviewer_models')
+        .update({
+          status: 'failed',
+          error_message: 'Failed to parse model response',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('job_id', jobId)
+        .eq('user_id', userId);
+
       return new Response(
         JSON.stringify({ error: 'Failed to parse model response' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`[Interviewer Model] Complete in ${Date.now() - startTime}ms`);
+    // Save results to database
+    const { error: updateError } = await supabase
+      .from('interviewer_models')
+      .update({
+        status: 'completed',
+        briefing,
+        error_message: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('job_id', jobId)
+      .eq('user_id', userId);
+
+    if (updateError) {
+      console.error('[Interviewer Model] Failed to save results:', updateError);
+      throw updateError;
+    }
+
+    console.log(`[Interviewer Model] Job ${jobId}: Complete in ${Date.now() - startTime}ms`);
 
     return new Response(
-      JSON.stringify({
-        success: true,
-        briefing,
-      }),
+      JSON.stringify({ success: true }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
     console.error(`[Interviewer Model] Error after ${Date.now() - startTime}ms:`, error);
+
+    // Update status to failed
+    if (jobId && userId) {
+      await supabase
+        .from('interviewer_models')
+        .update({
+          status: 'failed',
+          error_message: error instanceof Error ? error.message : 'Generation failed',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('job_id', jobId)
+        .eq('user_id', userId);
+    }
 
     return new Response(
       JSON.stringify({
