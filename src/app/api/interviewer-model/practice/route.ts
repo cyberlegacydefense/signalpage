@@ -63,12 +63,13 @@ async function handleStart(
     jobId?: string;
     briefing?: PracticeSessionConfig["briefing"];
     interviewerIndex?: number;
+    interviewerName?: string;
     mode?: PracticeSessionConfig["mode"];
     difficulty?: PracticeSessionConfig["difficulty"];
     maxTurns?: number;
   }
 ) {
-  const { jobId, briefing, interviewerIndex = 0, mode = "full_interview", difficulty = "neutral", maxTurns = 20 } = body;
+  const { jobId, briefing, interviewerIndex = 0, interviewerName, mode = "full_interview", difficulty = "neutral", maxTurns = 20 } = body;
 
   if (!briefing) {
     return NextResponse.json({ error: "Missing briefing" }, { status: 400 });
@@ -118,6 +119,9 @@ async function handleStart(
     },
   ];
 
+  // Get interviewer name from briefing or parameter
+  const interviewerDisplayName = interviewerName || briefing.interviewer_models[interviewerIndex]?.name || "Unknown";
+
   const { data: session, error } = await supabase
     .from("practice_sessions")
     .insert({
@@ -126,6 +130,7 @@ async function handleStart(
       mode,
       difficulty,
       interviewer_index: interviewerIndex,
+      interviewer_name: interviewerDisplayName,
       max_turns: maxTurns,
       status: "active",
       messages,
@@ -362,18 +367,22 @@ Provide your analysis as JSON:
 async function handleList(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
-  body: { jobId?: string }
+  body: { jobId?: string; activeOnly?: boolean }
 ) {
-  const { jobId } = body;
+  const { jobId, activeOnly } = body;
 
   let query = supabase
     .from("practice_sessions")
-    .select("id, job_id, mode, difficulty, status, created_at, updated_at")
+    .select("id, job_id, mode, difficulty, status, interviewer_name, messages, created_at, updated_at")
     .eq("user_id", userId)
-    .order("created_at", { ascending: false });
+    .order("updated_at", { ascending: false });
 
   if (jobId) {
     query = query.eq("job_id", jobId);
+  }
+
+  if (activeOnly) {
+    query = query.eq("status", "active");
   }
 
   const { data: sessions, error } = await query.limit(20);
@@ -382,7 +391,13 @@ async function handleList(
     return NextResponse.json({ error: "Failed to fetch sessions" }, { status: 500 });
   }
 
-  return NextResponse.json({ sessions });
+  // Add message count to each session
+  const sessionsWithCount = (sessions || []).map(s => ({
+    ...s,
+    messageCount: Array.isArray(s.messages) ? s.messages.length : 0,
+  }));
+
+  return NextResponse.json({ sessions: sessionsWithCount });
 }
 
 // ─────────────────────────────────────────────
@@ -423,7 +438,9 @@ export async function GET(request: NextRequest) {
         difficulty: session.difficulty,
         status: session.status,
         messages: session.messages,
+        interviewerName: session.interviewer_name,
         createdAt: session.created_at,
+        updatedAt: session.updated_at,
       },
     });
   } catch (error) {

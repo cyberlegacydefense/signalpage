@@ -49,6 +49,15 @@ interface InterviewerModel {
   created_at: string;
 }
 
+interface ActiveSession {
+  id: string;
+  interviewer_name: string;
+  mode: string;
+  difficulty: string;
+  messageCount: number;
+  updated_at: string;
+}
+
 interface PracticeSession {
   sessionId: string;
   interviewer: { name: string; role: string; company: string };
@@ -99,6 +108,9 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
   const [interviewers, setInterviewers] = useState<InterviewerModel[]>([]);
   const [selectedInterviewer, setSelectedInterviewer] = useState<InterviewerModel | null>(null);
 
+  // Active practice sessions
+  const [activeSessions, setActiveSessions] = useState<Map<string, ActiveSession>>(new Map());
+
   // Form for adding new interviewer
   const [newInterviewer, setNewInterviewer] = useState<InterviewerInput>({
     name: '',
@@ -126,7 +138,7 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
   const [sessionStatus, setSessionStatus] = useState<'active' | 'completed'>('active');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Fetch job data and existing interviewers on mount
+  // Fetch job data, interviewers, and active sessions on mount
   useEffect(() => {
     async function fetchData() {
       try {
@@ -142,6 +154,9 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
 
         // Fetch all interviewers for this job
         await refreshInterviewers();
+
+        // Fetch active practice sessions for this job
+        await refreshActiveSessions();
       } catch (err) {
         console.error('Failed to fetch data:', err);
       } finally {
@@ -161,6 +176,29 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
       }
     } catch (err) {
       console.error('Failed to fetch interviewers:', err);
+    }
+  };
+
+  // Refresh active practice sessions
+  const refreshActiveSessions = async () => {
+    try {
+      const response = await fetch('/api/interviewer-model/practice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'list', jobId, activeOnly: true }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const sessionsMap = new Map<string, ActiveSession>();
+        for (const s of data.sessions || []) {
+          if (s.interviewer_name) {
+            sessionsMap.set(s.interviewer_name, s);
+          }
+        }
+        setActiveSessions(sessionsMap);
+      }
+    } catch (err) {
+      console.error('Failed to fetch active sessions:', err);
     }
   };
 
@@ -315,7 +353,9 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'start',
+          jobId,
           briefing: selectedInterviewer.briefing,
+          interviewerName: selectedInterviewer.interviewer_name,
           mode,
           difficulty,
         }),
@@ -342,6 +382,51 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
       setStep('practice');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start practice session');
+    } finally {
+      setIsStarting(false);
+    }
+  };
+
+  // Resume an existing practice session
+  const resumeSession = async (activeSession: ActiveSession, interviewer: InterviewerModel) => {
+    setIsStarting(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/interviewer-model/practice?sessionId=${activeSession.id}`);
+      if (!response.ok) {
+        throw new Error('Failed to load session');
+      }
+
+      const data = await response.json();
+      const sessionData = data.session;
+
+      // Set up the session state
+      setSelectedInterviewer(interviewer);
+      setSession({
+        sessionId: sessionData.id,
+        interviewer: {
+          name: sessionData.interviewerName || interviewer.interviewer_name,
+          role: interviewer.briefing?.interviewer_models?.[0]?.current_role || '',
+          company: interviewer.briefing?.interviewer_models?.[0]?.company || '',
+        },
+        config: { mode: sessionData.mode, difficulty: sessionData.difficulty },
+      });
+
+      // Load messages
+      const loadedMessages: Message[] = (sessionData.messages || []).map((m: { role: string; content: string; emotional_tone?: string; turn_number?: number }) => ({
+        role: m.role as 'interviewer' | 'candidate',
+        content: m.content,
+        emotionalTone: m.emotional_tone,
+        turnNumber: m.turn_number,
+      }));
+      setMessages(loadedMessages);
+      setSessionStatus(sessionData.status === 'active' ? 'active' : 'completed');
+      setMode(sessionData.mode as Mode);
+      setDifficulty(sessionData.difficulty as Difficulty);
+      setStep('practice');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resume session');
     } finally {
       setIsStarting(false);
     }
@@ -423,9 +508,13 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
     }
   };
 
-  const backToList = () => {
+  const backToList = async () => {
     setSelectedInterviewer(null);
+    setSession(null);
+    setMessages([]);
     setStep('list');
+    // Refresh active sessions to show updated state
+    await refreshActiveSessions();
   };
 
   const startNewSession = () => {
@@ -506,19 +595,24 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
               const isComplete = interviewer.status === 'completed' && model;
               const isGenerating = interviewer.status === 'generating';
               const isFailed = interviewer.status === 'failed';
+              const activeSession = activeSessions.get(interviewer.interviewer_name);
 
               return (
                 <div
                   key={interviewer.id}
                   className={`rounded-lg border-2 p-4 transition-all ${
-                    isComplete
+                    activeSession
+                      ? 'border-green-300 bg-green-50 hover:border-green-400 cursor-pointer'
+                      : isComplete
                       ? 'border-gray-200 hover:border-purple-300 cursor-pointer'
                       : isGenerating
                       ? 'border-purple-200 bg-purple-50'
                       : 'border-red-200 bg-red-50'
                   }`}
                   onClick={() => {
-                    if (isComplete) {
+                    if (activeSession && isComplete) {
+                      resumeSession(activeSession, interviewer);
+                    } else if (isComplete) {
                       setSelectedInterviewer(interviewer);
                       setStep('view_model');
                     }
@@ -527,6 +621,7 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
                       <div className={`flex h-12 w-12 items-center justify-center rounded-full text-lg font-semibold ${
+                        activeSession ? 'bg-green-100 text-green-700' :
                         isComplete ? 'bg-purple-100 text-purple-700' :
                         isGenerating ? 'bg-purple-200 text-purple-800' :
                         'bg-red-100 text-red-700'
@@ -541,6 +636,11 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
                         <div className="font-medium text-gray-900">{interviewer.interviewer_name}</div>
                         {model && (
                           <div className="text-sm text-gray-500">{model.current_role}</div>
+                        )}
+                        {activeSession && (
+                          <div className="text-xs text-green-600">
+                            Session in progress ({activeSession.messageCount} messages)
+                          </div>
                         )}
                         {isGenerating && (
                           <div className="text-xs text-purple-600">Generating model...</div>
@@ -566,18 +666,33 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
                   </div>
                   {isComplete && (
                     <div className="mt-4">
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        className="w-full bg-gradient-to-r from-purple-600 to-indigo-600"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedInterviewer(interviewer);
-                          setStep('view_model');
-                        }}
-                      >
-                        Practice
-                      </Button>
+                      {activeSession ? (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          className="w-full bg-gradient-to-r from-green-600 to-emerald-600"
+                          isLoading={isStarting}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            resumeSession(activeSession, interviewer);
+                          }}
+                        >
+                          Resume Session
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          className="w-full bg-gradient-to-r from-purple-600 to-indigo-600"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedInterviewer(interviewer);
+                            setStep('view_model');
+                          }}
+                        >
+                          Practice
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>
