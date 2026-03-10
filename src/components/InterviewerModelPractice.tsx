@@ -72,14 +72,22 @@ interface Message {
 }
 
 interface Debrief {
-  overall_performance: {
+  // New API format
+  overall_score?: number;
+  hiring_prediction?: string;
+  areas_for_improvement?: Array<{ area: string; better_approach?: string; suggestion?: string }>;
+  key_moments?: Array<{ turn: number; what_happened: string; impact: string; suggestion?: string }>;
+  // Legacy format
+  overall_performance?: {
     score: number;
     hiring_decision: string;
     one_line_summary: string;
   };
-  strengths: Array<{ strength: string; evidence: string }>;
-  improvement_areas: Array<{ area: string; better_approach: string }>;
-  next_session_focus: string;
+  strengths?: Array<{ strength: string; evidence?: string }>;
+  improvement_areas?: Array<{ area: string; better_approach?: string }>;
+  next_session_focus?: string;
+  // Raw fallback
+  raw_analysis?: string;
 }
 
 type Mode = 'full_interview' | 'rapid_fire' | 'stress_test' | 'rapport_only';
@@ -1105,6 +1113,42 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
 
   // Step: Debrief
   if (step === 'debrief' && debrief) {
+    // Normalize debrief data to handle different API response formats
+    const score = debrief.overall_score ?? debrief.overall_performance?.score ?? 0;
+    const hiringDecision = debrief.hiring_prediction ?? debrief.overall_performance?.hiring_decision ?? 'unknown';
+    const summary = debrief.overall_performance?.one_line_summary ?? '';
+    const strengths = debrief.strengths ?? [];
+    const improvements = debrief.areas_for_improvement ?? debrief.improvement_areas ?? [];
+    const nextFocus = debrief.next_session_focus ?? 'Continue practicing to improve your interview skills.';
+
+    // If we only have raw_analysis, show that
+    if (debrief.raw_analysis && !debrief.overall_score && !debrief.overall_performance) {
+      return (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Performance Debrief</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-600 whitespace-pre-wrap">{debrief.raw_analysis}</p>
+            </CardContent>
+          </Card>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={backToList} className="flex-1">
+              Back to Interviewers
+            </Button>
+            <Button
+              variant="primary"
+              onClick={startNewSession}
+              className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600"
+            >
+              Practice Again
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-6">
         {/* Overall Score */}
@@ -1113,21 +1157,23 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Performance Debrief</h3>
-                <p className="mt-1 text-sm text-gray-600">{debrief.overall_performance.one_line_summary}</p>
+                {summary && <p className="mt-1 text-sm text-gray-600">{summary}</p>}
               </div>
               <div className="text-center">
                 <div className={`flex h-16 w-16 items-center justify-center rounded-full text-2xl font-bold ${
-                  debrief.overall_performance.score >= 8 ? 'bg-green-100 text-green-700' :
-                  debrief.overall_performance.score >= 6 ? 'bg-blue-100 text-blue-700' :
-                  debrief.overall_performance.score >= 4 ? 'bg-yellow-100 text-yellow-700' :
+                  score >= 8 ? 'bg-green-100 text-green-700' :
+                  score >= 6 ? 'bg-blue-100 text-blue-700' :
+                  score >= 4 ? 'bg-yellow-100 text-yellow-700' :
                   'bg-red-100 text-red-700'
                 }`}>
-                  {debrief.overall_performance.score}
+                  {score}
                 </div>
                 <p className={`mt-1 text-xs font-medium ${
-                  debrief.overall_performance.hiring_decision.includes('YES') ? 'text-green-600' : 'text-red-600'
+                  hiringDecision.toLowerCase().includes('yes') || hiringDecision.toLowerCase().includes('likely_hire')
+                    ? 'text-green-600'
+                    : 'text-red-600'
                 }`}>
-                  {debrief.overall_performance.hiring_decision.replace('_', ' ')}
+                  {hiringDecision.replace(/_/g, ' ').toUpperCase()}
                 </p>
               </div>
             </div>
@@ -1135,44 +1181,50 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
         </Card>
 
         {/* Strengths */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-green-700">Strengths</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {debrief.strengths.map((s, i) => (
-                <div key={i} className="rounded-lg bg-green-50 p-3">
-                  <p className="text-sm font-medium text-green-800">{s.strength}</p>
-                  <p className="mt-1 text-xs text-green-700">{s.evidence}</p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        {strengths.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-green-700">Strengths</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {strengths.map((s, i) => (
+                  <div key={i} className="rounded-lg bg-green-50 p-3">
+                    <p className="text-sm font-medium text-green-800">{s.strength || s}</p>
+                    {s.evidence && <p className="mt-1 text-xs text-green-700">{s.evidence}</p>}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Improvement Areas */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-amber-700">Areas for Improvement</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {debrief.improvement_areas.map((a, i) => (
-                <div key={i} className="rounded-lg bg-amber-50 p-3">
-                  <p className="text-sm font-medium text-amber-800">{a.area}</p>
-                  <p className="mt-1 text-xs text-amber-700">{a.better_approach}</p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        {improvements.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-amber-700">Areas for Improvement</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {improvements.map((a, i) => (
+                  <div key={i} className="rounded-lg bg-amber-50 p-3">
+                    <p className="text-sm font-medium text-amber-800">{a.area || a}</p>
+                    {(a.better_approach || a.suggestion) && (
+                      <p className="mt-1 text-xs text-amber-700">{a.better_approach || a.suggestion}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Next Focus */}
         <Card>
           <CardContent className="py-4">
             <h4 className="text-sm font-medium text-gray-700 mb-2">Focus for Next Session</h4>
-            <p className="text-sm text-gray-600 bg-purple-50 p-3 rounded-lg">{debrief.next_session_focus}</p>
+            <p className="text-sm text-gray-600 bg-purple-50 p-3 rounded-lg">{nextFocus}</p>
           </CardContent>
         </Card>
 
