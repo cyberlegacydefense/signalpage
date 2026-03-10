@@ -1212,8 +1212,9 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
             <CardContent>
               <div className="space-y-3">
                 {improvements.map((a, i) => {
-                  const areaText = typeof a === 'string' ? a : a.area;
-                  const approachText = typeof a === 'object' ? (a.better_approach || a.suggestion) : undefined;
+                  const item = a as { area?: string; better_approach?: string; suggestion?: string };
+                  const areaText = typeof a === 'string' ? a : item.area;
+                  const approachText = typeof a === 'object' ? (item.better_approach || item.suggestion) : undefined;
                   return (
                     <div key={i} className="rounded-lg bg-amber-50 p-3">
                       <p className="text-sm font-medium text-amber-800">{areaText}</p>
