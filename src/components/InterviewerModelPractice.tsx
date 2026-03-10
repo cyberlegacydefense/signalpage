@@ -953,14 +953,19 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
                 </Button>
               </div>
             ) : (
-              <div className="flex gap-3">
-                <input
-                  type="text"
+              <div className="flex gap-3 items-end">
+                <textarea
                   value={candidateInput}
                   onChange={(e) => setCandidateInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-                  placeholder="Type your response..."
-                  className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      sendMessage();
+                    }
+                  }}
+                  placeholder="Type your response... (Shift+Enter for new line)"
+                  rows={3}
+                  className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none max-h-40 overflow-y-auto"
                   disabled={isSending}
                 />
                 <Button
