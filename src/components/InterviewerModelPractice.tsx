@@ -1188,12 +1188,16 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {strengths.map((s, i) => (
-                  <div key={i} className="rounded-lg bg-green-50 p-3">
-                    <p className="text-sm font-medium text-green-800">{s.strength || s}</p>
-                    {s.evidence && <p className="mt-1 text-xs text-green-700">{s.evidence}</p>}
-                  </div>
-                ))}
+                {strengths.map((s, i) => {
+                  const strengthText = typeof s === 'string' ? s : s.strength;
+                  const evidenceText = typeof s === 'object' ? s.evidence : undefined;
+                  return (
+                    <div key={i} className="rounded-lg bg-green-50 p-3">
+                      <p className="text-sm font-medium text-green-800">{strengthText}</p>
+                      {evidenceText && <p className="mt-1 text-xs text-green-700">{evidenceText}</p>}
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -1207,14 +1211,16 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {improvements.map((a, i) => (
-                  <div key={i} className="rounded-lg bg-amber-50 p-3">
-                    <p className="text-sm font-medium text-amber-800">{a.area || a}</p>
-                    {(a.better_approach || a.suggestion) && (
-                      <p className="mt-1 text-xs text-amber-700">{a.better_approach || a.suggestion}</p>
-                    )}
-                  </div>
-                ))}
+                {improvements.map((a, i) => {
+                  const areaText = typeof a === 'string' ? a : a.area;
+                  const approachText = typeof a === 'object' ? (a.better_approach || a.suggestion) : undefined;
+                  return (
+                    <div key={i} className="rounded-lg bg-amber-50 p-3">
+                      <p className="text-sm font-medium text-amber-800">{areaText}</p>
+                      {approachText && <p className="mt-1 text-xs text-amber-700">{approachText}</p>}
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
