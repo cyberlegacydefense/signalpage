@@ -52,6 +52,7 @@ interface InterviewerModel {
 interface ActiveSession {
   id: string;
   interviewer_name: string;
+  status: string;
   mode: string;
   difficulty: string;
   messageCount: number;
@@ -429,10 +430,18 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
         turnNumber: m.turn_number,
       }));
       setMessages(loadedMessages);
-      setSessionStatus(sessionData.status === 'active' ? 'active' : 'completed');
       setMode(sessionData.mode as Mode);
       setDifficulty(sessionData.difficulty as Difficulty);
-      setStep('practice');
+
+      // If session is debriefed and has debrief data, show debrief view
+      if (sessionData.status === 'debriefed' && sessionData.debrief) {
+        setDebrief(sessionData.debrief);
+        setSessionStatus('completed');
+        setStep('debrief');
+      } else {
+        setSessionStatus(sessionData.status === 'active' ? 'active' : 'completed');
+        setStep('practice');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to resume session');
     } finally {
@@ -645,9 +654,14 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
                         {model && (
                           <div className="text-sm text-gray-500">{model.current_role}</div>
                         )}
-                        {activeSession && (
+                        {activeSession && activeSession.status === 'active' && (
                           <div className="text-xs text-green-600">
                             Session in progress ({activeSession.messageCount} messages)
+                          </div>
+                        )}
+                        {activeSession && activeSession.status === 'debriefed' && (
+                          <div className="text-xs text-blue-600">
+                            Completed - View debrief
                           </div>
                         )}
                         {isGenerating && (
@@ -678,14 +692,18 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
                         <Button
                           variant="primary"
                           size="sm"
-                          className="w-full bg-gradient-to-r from-green-600 to-emerald-600"
+                          className={`w-full ${
+                            activeSession.status === 'debriefed'
+                              ? 'bg-gradient-to-r from-blue-600 to-indigo-600'
+                              : 'bg-gradient-to-r from-green-600 to-emerald-600'
+                          }`}
                           isLoading={isStarting}
                           onClick={(e) => {
                             e.stopPropagation();
                             resumeSession(activeSession, interviewer);
                           }}
                         >
-                          Resume Session
+                          {activeSession.status === 'debriefed' ? 'View Debrief' : 'Resume Session'}
                         </Button>
                       ) : (
                         <Button

@@ -344,11 +344,12 @@ Provide your analysis as JSON:
     debrief = { raw_analysis: responseText };
   }
 
-  // Update session status
+  // Update session status and save debrief
   await supabase
     .from("practice_sessions")
     .update({
       status: "debriefed",
+      debrief,
       updated_at: new Date().toISOString(),
     })
     .eq("id", sessionId);
@@ -382,7 +383,8 @@ async function handleList(
   }
 
   if (activeOnly) {
-    query = query.eq("status", "active");
+    // Include both active and debriefed sessions (not abandoned 'ended' sessions)
+    query = query.in("status", ["active", "debriefed"]);
   }
 
   const { data: sessions, error } = await query.limit(20);
@@ -438,6 +440,7 @@ export async function GET(request: NextRequest) {
         difficulty: session.difficulty,
         status: session.status,
         messages: session.messages,
+        debrief: session.debrief,
         interviewerName: session.interviewer_name,
         createdAt: session.created_at,
         updatedAt: session.updated_at,
