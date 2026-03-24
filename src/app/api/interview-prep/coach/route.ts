@@ -187,7 +187,7 @@ Help me prepare to answer this question using my actual experience. Start by ide
     const anthropic = new Anthropic();
 
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-haiku-20241022',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       system: SYSTEM_PROMPT,
       messages: claudeMessages,
