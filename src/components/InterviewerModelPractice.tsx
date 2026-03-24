@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
+import { PracticeCoachPanel } from '@/components/PracticeCoachPanel';
 
 interface InterviewerModelPracticeProps {
   jobId: string;
@@ -145,6 +146,7 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionStatus, setSessionStatus] = useState<'active' | 'completed'>('active');
+  const [coachPanelOpen, setCoachPanelOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Fetch job data, interviewers, and active sessions on mount
@@ -1094,29 +1096,45 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
                 </Button>
               </div>
             ) : (
-              <div className="flex gap-3 items-end">
-                <textarea
-                  value={candidateInput}
-                  onChange={(e) => setCandidateInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      sendMessage();
-                    }
-                  }}
-                  placeholder="Type your response... (Shift+Enter for new line)"
-                  rows={3}
-                  className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none max-h-40 overflow-y-auto"
-                  disabled={isSending}
-                />
-                <Button
-                  variant="primary"
-                  onClick={sendMessage}
-                  disabled={isSending || !candidateInput.trim()}
-                  className="bg-gradient-to-r from-purple-600 to-indigo-600"
-                >
-                  Send
-                </Button>
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCoachPanelOpen(true)}
+                    disabled={isSending || messages.length === 0}
+                    className="bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200 text-amber-700 hover:from-amber-100 hover:to-orange-100"
+                  >
+                    <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    Coach Me
+                  </Button>
+                </div>
+                <div className="flex gap-3 items-end">
+                  <textarea
+                    value={candidateInput}
+                    onChange={(e) => setCandidateInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendMessage();
+                      }
+                    }}
+                    placeholder="Type your response... (Shift+Enter for new line)"
+                    rows={3}
+                    className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none max-h-40 overflow-y-auto"
+                    disabled={isSending}
+                  />
+                  <Button
+                    variant="primary"
+                    onClick={sendMessage}
+                    disabled={isSending || !candidateInput.trim()}
+                    className="bg-gradient-to-r from-purple-600 to-indigo-600"
+                  >
+                    Send
+                  </Button>
+                </div>
               </div>
             )}
           </div>
@@ -1124,6 +1142,26 @@ export function InterviewerModelPractice({ jobId, hasAccess }: InterviewerModelP
 
         {error && (
           <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>
+        )}
+
+        {/* Coach Panel */}
+        {selectedInterviewer?.briefing && (
+          <PracticeCoachPanel
+            isOpen={coachPanelOpen}
+            onClose={() => setCoachPanelOpen(false)}
+            jobId={jobId}
+            interviewerName={selectedInterviewer.interviewer_name}
+            interviewerContext={{
+              currentRole: selectedInterviewer.briefing.interviewer_models[0]?.current_role || '',
+              company: selectedInterviewer.briefing.interviewer_models[0]?.company || '',
+              careerArchetype: selectedInterviewer.briefing.interviewer_models[0]?.career_archetype?.label || '',
+              whatImpressesThem: selectedInterviewer.briefing.interviewer_models[0]?.thinking_style?.what_impresses_them || '',
+              whatConcernsThem: selectedInterviewer.briefing.interviewer_models[0]?.thinking_style?.what_concerns_them || '',
+              hiringLens: selectedInterviewer.briefing.interviewer_models[0]?.interview_behavior_model?.hiring_lens || '',
+            }}
+            conversationHistory={messages.map(m => ({ role: m.role, content: m.content }))}
+            currentQuestion={messages.filter(m => m.role === 'interviewer').slice(-1)[0]?.content || ''}
+          />
         )}
       </div>
     );

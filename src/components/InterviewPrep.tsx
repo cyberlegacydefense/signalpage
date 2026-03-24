@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
 import { InterviewerModelPractice } from '@/components/InterviewerModelPractice';
+import { InterviewCoachPanel } from '@/components/InterviewCoachPanel';
 import type {
   RoleContextPackage,
   InterviewQuestions,
@@ -92,6 +93,8 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
   const [error, setError] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<QuestionCategory | 'all'>('all');
   const [expandedQuestions, setExpandedQuestions] = useState<Set<string>>(new Set());
+  const [coachPanelOpen, setCoachPanelOpen] = useState(false);
+  const [coachingQuestion, setCoachingQuestion] = useState<InterviewQuestion | null>(null);
   const [progressStep, setProgressStep] = useState(0);
   const [progressStatus, setProgressStatus] = useState<string>('');
   const [isStuck, setIsStuck] = useState(false);
@@ -809,6 +812,25 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
                         <h5 className="text-sm font-medium text-amber-800">Prepare for Follow-up:</h5>
                         <p className="mt-1 text-sm text-amber-700">{answer.follow_up_prep}</p>
                       </div>
+
+                      {/* Coach Me Button */}
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCoachingQuestion(question);
+                            setCoachPanelOpen(true);
+                          }}
+                          className="bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-indigo-100"
+                        >
+                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                          </svg>
+                          Coach Me
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -832,6 +854,20 @@ export function InterviewPrep({ jobId, hasAccess }: InterviewPrepProps) {
           Last generated: {new Date(prep.generated_at).toLocaleString()}
         </p>
       </div>
+
+      {/* Interview Coach Panel */}
+      {coachingQuestion && (
+        <InterviewCoachPanel
+          isOpen={coachPanelOpen}
+          onClose={() => {
+            setCoachPanelOpen(false);
+            setCoachingQuestion(null);
+          }}
+          jobId={jobId}
+          question={coachingQuestion}
+          answer={getAnswerForQuestion(coachingQuestion.id)}
+        />
+      )}
     </div>
   );
 }
